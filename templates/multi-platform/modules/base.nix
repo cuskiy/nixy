@@ -1,13 +1,10 @@
-{ lib, ... }:
+{ mkStr, ... }:
 {
   modules.base = {
     target = "nixos";
     options = {
-      hostName = lib.mkOption { type = lib.types.str; };
-      timeZone = lib.mkOption {
-        type = lib.types.str;
-        default = "UTC";
-      };
+      hostName = mkStr null;
+      timeZone = mkStr "UTC";
     };
     module =
       { node, ... }:

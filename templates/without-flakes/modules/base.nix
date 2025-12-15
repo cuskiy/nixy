@@ -1,22 +1,23 @@
-{ lib, ... }:
+{ lib, mkStr, ... }:
 {
   modules.base = {
     target = "nixos";
     options = {
-      hostName = lib.mkOption { type = lib.types.str; };
-      timeZone = lib.mkOption {
-        type = lib.types.str;
-        default = "UTC";
-      };
+      hostName = mkStr null;
+      timeZone = mkStr "UTC";
     };
     module =
       { node, ... }:
       {
+        boot.loader.systemd-boot.enable = true;
+        boot.loader.efi.canTouchEfiVariables = true;
         networking.hostName = node.base.hostName;
         time.timeZone = node.base.timeZone;
         system.stateVersion = "24.11";
-        boot.loader.systemd-boot.enable = true;
-        boot.loader.efi.canTouchEfiVariables = true;
+        nix.settings.experimental-features = [
+          "nix-command"
+          "flakes"
+        ];
       };
   };
 }

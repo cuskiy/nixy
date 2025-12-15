@@ -1,6 +1,6 @@
-{ lib, ... }:
+{ lib, mkStr, ... }:
 {
-  modules.base.options.user = lib.mkOption { type = lib.types.str; };
+  modules.base.options.user = mkStr null;
   modules.base.module =
     { node, ... }:
     {

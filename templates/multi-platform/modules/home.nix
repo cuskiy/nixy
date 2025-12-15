@@ -1,13 +1,10 @@
-{ lib, ... }:
+{ mkStr, ... }:
 {
   modules.home = {
     target = "home";
     options = {
-      username = lib.mkOption { type = lib.types.str; };
-      directory = lib.mkOption {
-        type = lib.types.str;
-        default = "/home";
-      };
+      username = mkStr null;
+      directory = mkStr "/home";
     };
     module =
       { node, ... }:
