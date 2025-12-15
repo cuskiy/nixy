@@ -1,11 +1,12 @@
 <div align="center">
     <a href="#">
     <picture>
-      <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/logo.svg" width="100" alt="nixy logo">
+      <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/logo.svg" width="200" alt="nixy logo">
     </picture>
     </a>
 </div>
 
+<br/>
 Nixy is a framework that can help you simplify configuration.
 
 ## Key Features
