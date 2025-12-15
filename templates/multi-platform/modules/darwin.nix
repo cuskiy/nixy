@@ -1,8 +1,8 @@
-{ lib, ... }:
+{ mkStr, ... }:
 {
   modules.darwin = {
     target = "darwin";
-    options.hostName = lib.mkOption { type = lib.types.str; };
+    options.hostName = mkStr null;
     module =
       { node, ... }:
       {

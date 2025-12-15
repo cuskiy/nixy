@@ -1,12 +1,9 @@
-{ lib, ... }:
+{ lib, mkStr, ... }:
 {
   modules.deploy = {
     options = {
-      hostname = lib.mkOption { type = lib.types.str; };
-      sshUser = lib.mkOption {
-        type = lib.types.str;
-        default = "root";
-      };
+      hostname = mkStr null;
+      sshUser = mkStr "root";
     };
   };
 }
