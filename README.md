@@ -145,7 +145,6 @@ exclude = { name, ... }:
 nix run .#allOptions    # list all modules and options
 nix run .#allNodes      # list all nodes
 nix run .#checkOptions  # verify all options have defaults
-nix run .#graph         # show dependency graph (mermaid)
 ```
 
 ## Examples
