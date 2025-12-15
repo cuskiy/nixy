@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/logo.svg" width="75" alt="nixy logo">
-  <h1>Nixy</h1>
+  <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/logo.svg" width="100" alt="nixy logo">
 </div>
 
 All configuration lives in `nodes.*`. One node is one machine:
