@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://anialic.github.io/nixy">Documentation</a> ·
-  <a href="#quick-start">Quick Start</a> ·
   <a href="#templates">Templates</a>
 </p>
 
@@ -48,14 +47,6 @@ Only enabled modules are imported.
 }
 ```
 
-## Built-in Commands
-
-```bash
-nix run .#allOptions     # List modules and options
-nix run .#allNodes       # List nodes
-nix run .#checkOptions   # Verify option defaults
-```
-
 ## Templates
 
 | Template | Description |
@@ -67,4 +58,13 @@ nix run .#checkOptions   # Verify option defaults
 
 ```bash
 nix flake init -t github:anialic/nixy#<template>
+```
+
+
+## Built-in Commands
+
+```bash
+nix run .#allOptions     # List modules and options
+nix run .#allNodes       # List nodes
+nix run .#checkOptions   # Verify option defaults
 ```
