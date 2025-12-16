@@ -11,9 +11,7 @@
 
 # Reference
 
-- [API](./api.md)
 - [Helpers](./helpers.md)
-- [Options](./options.md)
 
 # Examples
 
