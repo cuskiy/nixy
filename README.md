@@ -1,22 +1,29 @@
-<div align="center">
-    <a href="#">
-    <picture>
-      <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/logo.svg" width="200" alt="nixy logo">
-    </picture>
-    </a>
-</div>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/assets/logo.svg" width="200" alt="Nixy">
+</p>
 
-<br/>
+<p align="center">
+  A minimal NixOS/Darwin/Home Manager framework
+</p>
 
-Nixy is a NixOS framework that lets you define machines as nodes, enable only what you need, and keep configurations clean and declarative.
+<p align="center">
+  <a href="https://anialic.github.io/nixy">Documentation</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#templates">Templates</a>
+</p>
 
-```
+---
+
+## Quick Start
+
+```bash
 nix flake init -t github:anialic/nixy#minimal
 ```
 
-## Why nixy?
+## Overview
 
-All configuration lives in `nodes.*`. One node is one machine:
+Nixy organizes your NixOS configuration around **nodes** (machines) and **modules** (features). Each node declares which modules it needs:
+
 ```nix
 nodes.server = {
   system = "x86_64-linux";
@@ -26,16 +33,10 @@ nodes.server = {
 };
 ```
 
-**How it works**
-
-1. Scans all `.nix` files under `imports`, collects definitions
-2. Each module gets an `enable` option under `nodes.<n>.<module>.enable`
-3. Only `enable = true` modules get imported; disabled modules don't exist in final config
-4. Outputs standard `nixosConfigurations` / `darwinConfigurations` / `homeConfigurations`
+Only enabled modules are imported. Disabled modules don't exist in the final configuration.
 
 ## Usage
 
-**Flake mode**
 ```nix
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -49,104 +50,27 @@ nodes.server = {
 }
 ```
 
-**Traditional mode**
-```nix
-let
-  lock = builtins.fromJSON (builtins.readFile ./inputs.lock);
-  fetch = name: builtins.fetchTarball lock.${name};
-  nixy = import (fetch "nixy");
-  nixpkgsSrc = fetch "nixpkgs";
-  pkgs = import nixpkgsSrc { };
-  nixpkgs = {
-    inherit (pkgs) lib;
-    legacyPackages.${builtins.currentSystem} = pkgs;
-  };
-in
-nixy.mkConfiguration {
-  inherit nixpkgs;
-  imports = [ ./. ];
-}
-```
+## Templates
 
-## API
+| Template | Description |
+|----------|-------------|
+| `minimal` | Single NixOS machine |
+| `multi-platform` | NixOS + Darwin + Home Manager |
+| `deploy-rs` | Remote deployment with deploy-rs |
+| `without-flakes` | Traditional non-flake setup |
 
-**mkFlake / mkConfiguration**
-```nix
-{
-  nixpkgs,          # required
-  imports ? [ ],    # directories or files to scan
-  args ? { },       # passed to all modules
-  exclude ? null,   # { name, path }: bool
-}
-```
-
-Default exclude skips _*, .*, default.nix and flake.nix:
-
-```nix
-exclude = { name, ... }:
-  let c = builtins.substring 0 1 name;
-  in c == "_" || c == "." || name == "flake.nix" || name == "default.nix";
-```
-
-**Top-level options**
-
-| Option | Description |
-|--------|-------------|
-| `systems` | List of systems (default: linux + darwin, x86_64 + aarch64) |
-| `modules.*` | Module definitions |
-| `nodes.*` | Node definitions |
-| `targets.*` | Target builders (nixos built-in) |
-| `rules` | Assertions before build |
-| `perSystem` | Per-system outputs (packages, devShells, etc.) |
-| `flake.*` | Extra flake outputs |
-
-**modules.\<name\>**
-
-| Field | Description |
-|-------|-------------|
-| `target` | `"nixos"`, `"darwin"`, `"home"`, or `null` (all) |
-| `requires` | Dependencies, checked at build time |
-| `options` | Option declarations |
-| `module` | NixOS/Darwin/HM module |
-
-**nodes.\<name\>**
-
-| Field | Description |
-|-------|-------------|
-| `system` | Required, e.g. `"x86_64-linux"` |
-| `target` | Optional, inferred from system |
-| `<module>.enable` | Enable a module |
-| `<module>.<option>` | Set module options |
-| `extraModules` | Additional NixOS/Darwin/HM modules |
-| `instantiate` | Custom builder |
-
-**Framework module arguments**
-
-| Arg | Description |
-|-----|-------------|
-| `lib` | nixpkgs.lib |
-| `nixpkgs` | nixpkgs input |
-| `config` | Framework config |
-| `pkgsFor` | `system -> pkgs` |
-| `mkStr`, `mkBool`, ... | Option helpers |
-
-**NixOS/Darwin/HM module arguments**
-
-| Arg | Description |
-|-----|-------------|
-| `node` | Current node config |
-| `nodes` | All node configs |
-| `name` | Node name |
-| `system` | System string |
-| `inputs` | All inputs |
-
-**Built-in apps**
 ```bash
-nix run .#allOptions    # list all modules and options
-nix run .#allNodes      # list all nodes
-nix run .#checkOptions  # verify all options have defaults
+nix flake init -t github:anialic/nixy#<template>
 ```
 
-## Examples
+## Built-in Commands
 
-- [Anialic's NixOS Configurations](https://github.com/anialic/nixos)
+```bash
+nix run .#allOptions     # List modules and options
+nix run .#allNodes       # List nodes
+nix run .#checkOptions   # Verify option defaults
+```
+
+## License
+
+Apache-2.0

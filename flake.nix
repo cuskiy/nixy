@@ -1,37 +1,30 @@
 {
-  description = "nixy: A minimal NixOS/Darwin/Home Manager framework";
+  description = "Nixy - A minimal NixOS/Darwin/Home Manager framework";
 
   outputs =
     { self }:
     {
       templates = {
         minimal = {
-          description = ''
-            Minimal configuration.
-          '';
+          description = "Minimal NixOS configuration";
           path = ./templates/minimal;
         };
         multi-platform = {
-          description = ''
-            Use Standalone Home-Manager and nix-darwin.
-          '';
+          description = "NixOS + nix-darwin + Home Manager";
           path = ./templates/multi-platform;
         };
         deploy-rs = {
-          description = ''
-            Use deploy-rs.
-          '';
+          description = "With deploy-rs for remote deployment";
           path = ./templates/deploy-rs;
         };
         without-flakes = {
-          description = ''
-            Traditional configuration. You need `nix-build -A nixosConfigurations.<hostname>.config.system.build.toplevel` and `sudo bash ./result/bin/switch-to-configuration switch` for it to take effect.
-          '';
+          description = "Traditional configuration without flakes";
           path = ./templates/without-flakes;
         };
       };
 
-      mkFlake = import ./lib/mkFlake.nix;
-      mkConfiguration = import ./lib/mkConfiguration.nix;
+      lib = import ./nix/eval.nix;
+      mkFlake = import ./nix/mkFlake.nix;
+      mkConfiguration = import ./nix/mkConfiguration.nix;
     };
 }

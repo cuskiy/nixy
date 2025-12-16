@@ -1,8 +1,8 @@
 {
-  nodes.alice = {
-    system = "aarch64-linux";
+  nodes.my-nixos = {
+    system = "x86_64-linux";
     base.enable = true;
-    base.hostName = "alice";
+    base.hostName = "my-nixos";
     base.user = "alice";
     extraModules = [
       {

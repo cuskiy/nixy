@@ -1,4 +1,4 @@
-{ lib, mkStr, ... }:
+{ mkStr, ... }:
 {
   modules.deploy = {
     options = {

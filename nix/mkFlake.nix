@@ -5,14 +5,13 @@
   exclude ? null,
 }:
 let
-  nixyLib = import ./lib.nix { inherit (nixpkgs) lib; };
+  nixy = import ./eval.nix { inherit (nixpkgs) lib; };
 in
-nixyLib.eval {
+nixy.eval {
   inherit
     nixpkgs
     args
     exclude
     imports
     ;
-  inputs = { inherit nixpkgs; };
 }

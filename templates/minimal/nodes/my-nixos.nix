@@ -1,10 +1,9 @@
 {
-  nodes.alice = {
+  nodes.my-nixos = {
     system = "x86_64-linux";
     base.enable = true;
-    base.hostName = "alice";
+    base.hostName = "my-nixos";
     base.user = "alice";
-    base.timeZone = "Asia/Shanghai";
     extraModules = [
       {
         fileSystems."/" = {

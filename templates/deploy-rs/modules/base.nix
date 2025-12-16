@@ -1,4 +1,4 @@
-{ lib, mkStr, ... }:
+{ mkStr, ... }:
 {
   modules.base = {
     target = "nixos";
@@ -9,6 +9,8 @@
     module =
       { node, ... }:
       {
+        boot.loader.systemd-boot.enable = true;
+        boot.loader.efi.canTouchEfiVariables = true;
         networking.hostName = node.base.hostName;
         time.timeZone = node.base.timeZone;
         system.stateVersion = "24.11";
@@ -16,8 +18,6 @@
           "nix-command"
           "flakes"
         ];
-        boot.loader.systemd-boot.enable = true;
-        boot.loader.efi.canTouchEfiVariables = true;
       };
   };
 }

@@ -1,5 +1,33 @@
 { lib }:
 rec {
+  meta = {
+    version = "0.1.0";
+    helpers = {
+      mkStr = "String option, null default wraps in nullOr";
+      mkBool = "Boolean option";
+      mkInt = "Integer option";
+      mkPort = "Port number option (1-65535)";
+      mkPath = "Path option";
+      mkLines = "Multi-line string option";
+      mkAttrs = "Attribute set option";
+      mkList = "List option with element type";
+      mkListOf = "List option with empty default";
+      mkAttrsOf = "Attrs option with empty default";
+      mkStrList = "List of strings with empty default";
+      mkEnum = "Enum option from values list";
+      mkEither = "Either of two types";
+      mkOneOf = "One of multiple types";
+      mkPackage = "Package option (no default)";
+      mkPackageOr = "Package option with default";
+      mkRaw = "Raw type option (no default)";
+      mkRawOr = "Raw type option with default";
+      mkNullable = "Nullable option of any type";
+      mkSub = "Submodule option";
+      mkSubList = "List of submodules";
+      mkEnable = "Enable option (lib.mkEnableOption)";
+    };
+  };
+
   mkOpt =
     type: default:
     if default == null then
@@ -18,7 +46,6 @@ rec {
     mkPath = mkOpt lib.types.path;
     mkLines = mkOpt lib.types.lines;
     mkAttrs = mkOpt lib.types.attrs;
-
     mkList = elemType: mkOpt (lib.types.listOf elemType);
     mkListOf =
       type:
@@ -36,11 +63,9 @@ rec {
       type = lib.types.listOf lib.types.str;
       default = [ ];
     };
-
     mkEnum = values: mkOpt (lib.types.enum values);
     mkEither = t1: t2: mkOpt (lib.types.either t1 t2);
     mkOneOf = types: mkOpt (lib.types.oneOf types);
-
     mkPackage = lib.mkOption { type = lib.types.package; };
     mkPackageOr =
       default:
@@ -61,7 +86,6 @@ rec {
         type = lib.types.nullOr type;
         default = null;
       };
-
     mkSub =
       opts:
       lib.mkOption {
@@ -74,7 +98,6 @@ rec {
         type = lib.types.listOf (lib.types.submodule { options = opts; });
         default = [ ];
       };
-
     mkEnable = lib.mkEnableOption;
   };
 
@@ -142,11 +165,7 @@ rec {
     x: if builtins.isPath x then lib.setDefaultModuleLocation (toString x) (import x) else x;
 
   mkCoreModule =
-    {
-      nixpkgs,
-      inputs,
-      args,
-    }:
+    { nixpkgs, args }:
     { config, ... }:
     let
       moduleEntries = lib.mapAttrsToList (
@@ -184,7 +203,7 @@ rec {
               extraKeys = builtins.filter (k: k != "enable") (builtins.attrNames merged);
             in
             if enabled == false && extraKeys != [ ] then
-              throw "nixy: ${lib.concatStringsSep "." loc}: options set but enable = false (keys: ${lib.concatStringsSep ", " extraKeys})"
+              throw "nixy: ${lib.concatStringsSep "." loc}: options set but enable = false (keys: ${lib.concatStringsSep ", " extraKeys}). Did you forget enable = true?"
             else if enabled == true then
               fullType.merge loc defs
             else
@@ -263,13 +282,7 @@ rec {
               modConfig = enriched.raw.${m.name} or { };
               enabled = modConfig.enable or false;
               targetMatch = m.target == null || m.target == enriched.target;
-              missingDeps = lib.filter (
-                dep:
-                let
-                  depConfig = enriched.raw.${dep} or { };
-                in
-                !(depConfig.enable or false)
-              ) m.requires;
+              missingDeps = lib.filter (dep: !((enriched.raw.${dep} or { }).enable or false)) m.requires;
             in
             {
               inherit
@@ -306,12 +319,12 @@ rec {
         lib.throwIf (errors != [ ])
           (
             "nixy: configuration errors in node '${name}':\n"
-            + lib.concatMapStringsSep "\n" (e: "  • ${e}") errors
+            + lib.concatMapStringsSep "\n" (e: "  - ${e}") errors
           )
           (instantiate {
             system = enriched.system;
             specialArgs = {
-              inherit name inputs;
+              inherit name;
               system = enriched.system;
               node = enriched.clean;
               nodes = allNodes;
@@ -351,7 +364,6 @@ rec {
           nixpkgs.legacyPackages.${system}.nixfmt-rfc-style
       );
 
-      # Collect option paths from a module's options
       collectPaths =
         prefix: opts:
         lib.concatLists (
@@ -366,7 +378,6 @@ rec {
                   inherit path;
                   type = opt.type.description or opt.type.name or "?";
                   default = opt.default or null;
-                  hasDefault = opt ? default;
                 }
               ]
             else if builtins.isAttrs opt then
@@ -382,7 +393,6 @@ rec {
           totalOptions = lib.foldl' (
             acc: m: acc + builtins.length (collectPaths "" m.options)
           ) 0 moduleEntries;
-
           formatModule =
             m:
             let
@@ -406,27 +416,16 @@ rec {
                       "| `${p.path}` | ${p.type} | ${defStr} |"
                     ) paths}'';
             in
-            ''
-              <details>
-              <summary>${summary}</summary>
-
-              ${body}
-
-              </details>'';
+            "<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>";
         in
-        ''
-          # nixy modules
-
-          > ${toString moduleCount} modules, ${toString totalOptions} options
-
-          ${lib.concatMapStringsSep "\n\n" formatModule moduleEntries}
-        '';
+        "# Modules\n\n> ${toString moduleCount} modules, ${toString totalOptions} options\n\n${
+          lib.concatMapStringsSep "\n\n" formatModule moduleEntries
+        }\n";
 
       nodesDoc =
         let
           nodeCount = builtins.length (builtins.attrNames enrichedNodes);
           byTarget = lib.groupBy (n: enrichedNodes.${n}.target) (builtins.attrNames enrichedNodes);
-
           formatNode =
             name:
             let
@@ -440,27 +439,10 @@ rec {
                 else
                   lib.concatMapStringsSep "\n" (m: "- ${m.name}") enabledMods;
             in
-            ''
-              <details>
-              <summary>${summary}</summary>
-
-              ${body}
-
-              </details>'';
-
-          formatTarget = target: nodes: ''
-            ### ${target}
-
-            ${lib.concatMapStringsSep "\n\n" formatNode nodes}
-          '';
+            "<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>";
+          formatTarget = target: nodes: "### ${target}\n\n${lib.concatMapStringsSep "\n\n" formatNode nodes}";
         in
-        ''
-          # nixy nodes
-
-          > ${toString nodeCount} nodes
-
-          ${lib.concatStringsSep "\n\n" (lib.mapAttrsToList formatTarget byTarget)}
-        '';
+        "# Nodes\n\n> ${toString nodeCount} nodes\n\n${lib.concatStringsSep "\n\n" (lib.mapAttrsToList formatTarget byTarget)}\n";
 
       optionsCheck =
         let
@@ -473,50 +455,37 @@ rec {
                   path = if prefix == "" then name else "${prefix}.${name}";
                 in
                 if opt ? _type && opt._type == "option" then
-                  if opt ? default then [ ] else [ path ]
+                  (if opt ? default then [ ] else [ path ])
                 else if builtins.isAttrs opt then
                   collectMissing path opt
                 else
                   [ ]
               ) opts
             );
-
           modulesWithMissing = lib.filter (m: m.missing != [ ]) (
             map (m: {
               inherit (m) name target;
               missing = collectMissing "" m.options;
             }) moduleEntries
           );
-
           totalMissing = lib.foldl' (acc: m: acc + builtins.length m.missing) 0 modulesWithMissing;
         in
         if modulesWithMissing == [ ] then
-          ''
-
-            All options have default values.
-          ''
+          "All options have default values.\n"
         else
-          ''
-            # Options Missing Defaults
-
-            > ${toString totalMissing} options without defaults in ${toString (builtins.length modulesWithMissing)} modules
-
-            ${lib.concatMapStringsSep "\n\n" (
+          "# Missing Defaults\n\n> ${toString totalMissing} options in ${toString (builtins.length modulesWithMissing)} modules\n\n${
+            lib.concatMapStringsSep "\n\n" (
               m:
               let
                 targetStr = if m.target != null then " [${m.target}]" else "";
               in
-              ''
-                <details>
-                <summary>${m.name}${targetStr} (${toString (builtins.length m.missing)} missing)</summary>
+              "<details>\n<summary>${m.name}${targetStr} (${toString (builtins.length m.missing)})</summary>\n\n${
+                lib.concatMapStringsSep "\n" (p: "- `${p}`") m.missing
+              }\n\n</details>"
+            ) modulesWithMissing
+          }\n";
 
-                ${lib.concatMapStringsSep "\n" (p: "- `${p}`") m.missing}
-
-                </details>''
-            ) modulesWithMissing}
-          '';
-
-      optionsCheckFailed = lib.hasPrefix "# Options Missing" optionsCheck;
+      optionsCheckFailed = lib.hasPrefix "# Missing" optionsCheck;
 
       mkApp = system: name: script: {
         type = "app";
@@ -524,30 +493,17 @@ rec {
       };
 
       builtinApps = lib.genAttrs config.systems (system: {
-        allOptions = mkApp system "options" ''
-          cat <<'EOF'
-          ${optionsDoc}
-          EOF
-        '';
-        allNodes = mkApp system "nodes" ''
-          cat <<'EOF'
-          ${nodesDoc}
-          EOF
-        '';
-        checkOptions = mkApp system "check" ''
-          cat <<'EOF'
-          ${optionsCheck}
-          EOF
-          ${lib.optionalString optionsCheckFailed "exit 1"}
-        '';
+        allOptions = mkApp system "options" "cat <<'EOF'\n${optionsDoc}EOF";
+        allNodes = mkApp system "nodes" "cat <<'EOF'\n${nodesDoc}EOF";
+        checkOptions =
+          mkApp system "check"
+            "cat <<'EOF'\n${optionsCheck}EOF\n${lib.optionalString optionsCheckFailed "exit 1"}";
       });
 
       rulesErrors = map (r: r.message) (builtins.filter (r: r.assertion == false) config.rules);
-
       checkRules = lib.throwIf (rulesErrors != [ ]) (
-        "nixy: rules failed:\n" + lib.concatMapStringsSep "\n" (e: "  • ${e}") rulesErrors
+        "nixy: rules failed:\n" + lib.concatMapStringsSep "\n" (e: "  - ${e}") rulesErrors
       ) true;
-
       targetOutputsChecked = lib.mapAttrs (
         _: configs:
         lib.mapAttrs (
@@ -570,7 +526,6 @@ rec {
             "x86_64-darwin"
           ];
         };
-
         modules = lib.mkOption {
           type = lib.types.attrsOf (
             lib.types.submodule {
@@ -596,7 +551,6 @@ rec {
           );
           default = { };
         };
-
         targets = lib.mkOption {
           type = lib.types.attrsOf (
             lib.types.submodule {
@@ -608,12 +562,10 @@ rec {
           );
           default = { };
         };
-
         nodes = lib.mkOption {
           type = lib.types.attrsOf nodeType;
           default = { };
         };
-
         rules = lib.mkOption {
           type = lib.types.listOf (
             lib.types.submodule {
@@ -625,12 +577,10 @@ rec {
           );
           default = [ ];
         };
-
         perSystem = lib.mkOption {
           type = lib.types.functionTo (lib.types.lazyAttrsOf lib.types.raw);
           default = _: { };
         };
-
         flake = lib.mkOption {
           type = lib.types.submoduleWith {
             modules = [ { freeformType = lib.types.lazyAttrsOf lib.types.raw; } ];
@@ -674,7 +624,6 @@ rec {
   eval =
     {
       nixpkgs,
-      inputs,
       imports,
       args,
       exclude,
@@ -682,12 +631,12 @@ rec {
     let
       excludeFn = if exclude != null then exclude else defaultExclude;
       allModules = lib.concatMap (resolveImport excludeFn) (lib.toList imports);
-      coreModule = mkCoreModule { inherit nixpkgs inputs args; };
+      coreModule = mkCoreModule { inherit nixpkgs args; };
       evaluated = lib.evalModules {
         class = "nixy";
         modules = map loadModule allModules ++ [ coreModule ];
         specialArgs = {
-          inherit lib nixpkgs inputs;
+          inherit lib nixpkgs;
           pkgsFor = system: nixpkgs.legacyPackages.${system};
         }
         // helpers

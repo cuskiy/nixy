@@ -1,4 +1,4 @@
 {
-  "nixpkgs": { "url": "https://github.com/NixOS/nixpkgs/archive/nixos-unstable-small.tar.gz", "sha256": "199zzqn5rfz51gi1admazxri0g7b4icjlbg5qizq3zvi6gxa3pkr" },
-  "nixy": { "url": "https://github.com/anialic/nixy/archive/main.tar.gz", "sha256": "0i68a79mxrkqgqincj0l2qwb3kz1dnvpy3ya6fq5lx4cvzwycqrc" }
+  "nixpkgs": { "url": "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz" },
+  "nixy": { "url": "https://github.com/anialic/nixy/archive/main.tar.gz" }
 }
