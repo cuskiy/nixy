@@ -1,0 +1,4 @@
+{
+  "nixpkgs": { "url": "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz" },
+  "nixy": { "url": "https://github.com/anialic/nixy/archive/main.tar.gz" }
+}

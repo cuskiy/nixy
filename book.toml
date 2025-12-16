@@ -1,0 +1,12 @@
+[book]
+title = "Nixy"
+authors = ["anialic"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/anialic/nixy"
+edit-url-template = "https://github.com/anialic/nixy/edit/main/{path}"
