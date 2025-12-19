@@ -22,7 +22,7 @@ my-config/
 ├── modules/
 │   └── base.nix
 └── nodes/
-    └── alice.nix
+    └── my-machine.nix
 ```
 
 ## Basic Configuration
@@ -35,7 +35,7 @@ my-config/
 
   outputs = { nixpkgs, nixy, ... }@inputs: nixy.mkFlake {
     inherit nixpkgs;
-    imports = [ ./modules ./nodes ];
+    imports = [ ./. ];
     args = { inherit inputs; };
   };
 }
@@ -43,26 +43,26 @@ my-config/
 
 **modules/base.nix**
 ```nix
-{ mkStr, lib, ... }:
+{ mkStr, ... }:
 {
   modules.base = {
     target = "nixos";
     options.hostName = mkStr null;
     module = { node, ... }: {
       networking.hostName = node.base.hostName;
-      system.stateVersion = "25.11";
+      system.stateVersion = "24.11";
     };
   };
 }
 ```
 
-**nodes/alice.nix**
+**nodes/my-machine.nix**
 ```nix
 {
-  nodes.alice = {
+  nodes.my-machine = {
     system = "x86_64-linux";
     base.enable = true;
-    base.hostName = "alice";
+    base.hostName = "my-machine";
   };
 }
 ```
@@ -70,5 +70,5 @@ my-config/
 ## Building
 
 ```bash
-nixos-rebuild switch --flake .#alice
+nixos-rebuild switch --flake .#my-machine
 ```

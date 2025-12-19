@@ -4,7 +4,7 @@ A minimal NixOS/Darwin/Home Manager framework.
 
 ## What is Nixy?
 
-Nixy helps you organize NixOS configurations around **nodes** and **modules**. Instead of managing complex module imports, you declare what each machine needs:
+Nixy helps you organize NixOS configurations around **nodes** (machines) and **modules** (reusable features). Instead of managing complex module imports, you declare what each machine needs:
 
 ```nix
 nodes.server = {
@@ -16,7 +16,7 @@ nodes.server = {
 
 ## Key Features
 
-- **Node-centric**: All config in one place.
+- **Node-centric**: One node = one machine. All config in one place.
 - **Conditional modules**: Only enabled modules are imported.
 - **Type-safe**: Options on disabled modules throw errors.
 - **Multi-platform**: NixOS, Darwin, and Home Manager support.

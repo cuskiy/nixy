@@ -1,32 +1,6 @@
 { lib }:
 rec {
-  meta = {
-    version = "0.2.0";
-    helpers = {
-      mkStr = "String option, null default wraps in nullOr";
-      mkBool = "Boolean option";
-      mkInt = "Integer option";
-      mkPort = "Port number option (1-65535)";
-      mkPath = "Path option";
-      mkLines = "Multi-line string option";
-      mkAttrs = "Attribute set option";
-      mkList = "List option with element type";
-      mkListOf = "List option with empty default";
-      mkAttrsOf = "Attrs option with empty default";
-      mkStrList = "List of strings with empty default";
-      mkEnum = "Enum option from values list";
-      mkEither = "Either of two types";
-      mkOneOf = "One of multiple types";
-      mkPackage = "Package option (no default)";
-      mkPackageOr = "Package option with default";
-      mkRaw = "Raw type option (no default)";
-      mkRawOr = "Raw type option with default";
-      mkNullable = "Nullable option of any type";
-      mkSub = "Submodule option";
-      mkSubList = "List of submodules";
-      mkEnable = "Enable option (lib.mkEnableOption)";
-    };
-  };
+  meta.version = "0.2.0";
 
   mkOpt =
     type: default:

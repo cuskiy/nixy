@@ -8,8 +8,11 @@
 
 <p align="center">
   <a href="https://anialic.github.io/nixy">Documentation</a> ·
+  <a href="#quick-start">Quick Start</a> ·
   <a href="#templates">Templates</a>
 </p>
+
+---
 
 ## Quick Start
 
@@ -19,7 +22,7 @@ nix flake init -t github:anialic/nixy#minimal
 
 ## Overview
 
-Nixy organizes your NixOS configuration around **nodes** and **modules**. Each node declares which modules it needs:
+Nixy organizes your NixOS configuration around **nodes** (machines) and **modules** (features). Each node declares which modules it needs:
 
 ```nix
 nodes.server = {
@@ -30,7 +33,7 @@ nodes.server = {
 };
 ```
 
-Only enabled modules are imported.
+Only enabled modules are imported. Disabled modules don't exist in the final configuration.
 
 ## Usage
 
@@ -41,7 +44,7 @@ Only enabled modules are imported.
 
   outputs = { nixpkgs, nixy, ... }@inputs: nixy.mkFlake {
     inherit nixpkgs;
-    imports = [ ./modules ./nodes ];
+    imports = [ ./. ];
     args = { inherit inputs; };
   };
 }
@@ -60,7 +63,6 @@ Only enabled modules are imported.
 nix flake init -t github:anialic/nixy#<template>
 ```
 
-
 ## Built-in Commands
 
 ```bash
@@ -68,3 +70,7 @@ nix run .#allOptions     # List modules and options
 nix run .#allNodes       # List nodes
 nix run .#checkOptions   # Verify option defaults
 ```
+
+## License
+
+Apache-2.0

@@ -7,7 +7,7 @@
 {
   modules.myModule = {
     target = "nixos";           # "nixos", "darwin", "home", or null (all)
-    requires = [ "base" ];      # dependencies, check at build time
+    requires = [ "base" ];      # dependencies
     options = {
       setting = mkStr "default";
     };
