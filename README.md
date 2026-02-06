@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  A minimal NixOS/Darwin/Home Manager framework
+  Lightweight NixOS/Darwin/Home Manager framework
 </p>
 
 <p align="center">
@@ -22,27 +22,41 @@ nix flake init -t github:anialic/nixy#minimal
 
 ## Overview
 
-Nixy organizes your NixOS configuration around **nodes** (machines) and **modules** (features). Each node declares which modules it needs:
+Nixy organizes configurations around **hosts** (machines) and **modules** (features). Each host declares which modules it needs:
 
 ```nix
-nodes.server = {
+hosts.server = {
   system = "x86_64-linux";
   base.enable = true;
   base.hostName = "server";
-  ssh.enable = true;
 };
 ```
 
-Only enabled modules are imported. Disabled modules don't exist in the final configuration.
+Options are declared in `schema`, modules are loaded via `modules.*.load`:
+
+```nix
+{ mkStr, ... }:
+{
+  schema.base.hostName = mkStr null;
+
+  modules.base.load = [({ host, ... }: {
+    networking.hostName = host.base.hostName;
+  })];
+}
+```
+
+Only enabled modules are loaded. Disabled modules don't exist in the final configuration.
 
 ## Usage
 
 ```nix
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  inputs.nixy.url = "github:anialic/nixy";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixy.url = "github:anialic/nixy";
+  };
 
-  outputs = { nixpkgs, nixy, ... }@inputs: nixy.mkFlake {
+  outputs = { nixpkgs, nixy, ... }@inputs: nixy.eval {
     inherit nixpkgs;
     imports = [ ./. ];
     args = { inherit inputs; };
@@ -55,9 +69,7 @@ Only enabled modules are imported. Disabled modules don't exist in the final con
 | Template | Description |
 |----------|-------------|
 | `minimal` | Single NixOS machine |
-| `multi-platform` | NixOS + Darwin + Home Manager |
-| `deploy-rs` | Remote deployment with deploy-rs |
-| `without-flakes` | Traditional non-flake setup |
+| `complex` | Multi-platform with deploy-rs, custom targets, and assertions |
 
 ```bash
 nix flake init -t github:anialic/nixy#<template>
@@ -66,9 +78,7 @@ nix flake init -t github:anialic/nixy#<template>
 ## Built-in Commands
 
 ```bash
-nix run .#allOptions     # List modules and options
-nix run .#allNodes       # List nodes
-nix run .#checkOptions   # Verify option defaults
+nix run .#check    # Show schema, modules, and hosts
 ```
 
 ## License

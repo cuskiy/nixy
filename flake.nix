@@ -1,5 +1,5 @@
 {
-  description = "Nixy - A minimal NixOS/Darwin/Home Manager framework";
+  description = "Nixy — Lightweight NixOS/Darwin/Home Manager framework";
 
   outputs =
     { self }:
@@ -9,22 +9,24 @@
           description = "Minimal NixOS configuration";
           path = ./templates/minimal;
         };
-        multi-platform = {
-          description = "NixOS + nix-darwin + Home Manager";
-          path = ./templates/multi-platform;
-        };
-        deploy-rs = {
-          description = "With deploy-rs for remote deployment";
-          path = ./templates/deploy-rs;
-        };
-        without-flakes = {
-          description = "Traditional configuration without flakes";
-          path = ./templates/without-flakes;
+        complex = {
+          description = "Multi-platform with deploy-rs, custom targets, and assertions";
+          path = ./templates/complex;
         };
       };
 
-      lib = import ./nix/eval.nix;
-      mkFlake = import ./nix/mkFlake.nix;
-      mkConfiguration = import ./nix/mkConfiguration.nix;
+      eval =
+        {
+          nixpkgs,
+          imports ? [ ],
+          args ? { },
+          exclude ? null,
+        }:
+        let
+          nixy = import ./nix/eval.nix { inherit (nixpkgs) lib; };
+        in
+        nixy.eval {
+          inherit nixpkgs imports args exclude;
+        };
     };
 }

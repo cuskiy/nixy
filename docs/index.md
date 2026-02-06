@@ -1,26 +1,26 @@
 # Nixy
 
-A minimal NixOS/Darwin/Home Manager framework.
+Lightweight NixOS/Darwin/Home Manager framework.
 
 ## What is Nixy?
 
-Nixy helps you organize NixOS configurations around **nodes** (machines) and **modules** (reusable features). Instead of managing complex module imports, you declare what each machine needs:
+Nixy organizes NixOS configurations around **hosts** (machines) and **modules** (features). Options are declared in `schema`, implementation goes in `modules.*.load`:
 
 ```nix
-nodes.server = {
+hosts.server = {
   system = "x86_64-linux";
   base.enable = true;
-  ssh.enable = true;
+  base.hostName = "server";
 };
 ```
 
 ## Key Features
 
-- **Node-centric**: One node = one machine. All config in one place.
-- **Conditional modules**: Only enabled modules are imported.
-- **Type-safe**: Options on disabled modules throw errors.
-- **Multi-platform**: NixOS, Darwin, and Home Manager support.
-- **Dependency tracking**: Modules can declare requirements.
+- **Host-centric**: One host = one machine. All config in one place.
+- **Schema/module split**: Declare options in `schema`, load NixOS modules in `modules.*.load`.
+- **Multi-platform**: NixOS, Darwin, and Home Manager via custom targets.
+- **Composable**: Multiple files contribute to the same schema and modules via deep merge.
+- **Lightweight**: No dependencies beyond nixpkgs.
 
 ## Quick Start
 
@@ -28,4 +28,4 @@ nodes.server = {
 nix flake init -t github:anialic/nixy#minimal
 ```
 
-Then edit `nodes/` and `modules/` to match your setup.
+Then edit `modules/` and `hosts/` to match your setup.

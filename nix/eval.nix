@@ -1,16 +1,13 @@
 { lib }:
-rec {
-  meta.version = "0.2.0";
+let
+  # -- helpers ---------------------------------------------------------
 
   mkOpt =
     type: default:
-    if default == null then
-      lib.mkOption {
-        type = lib.types.nullOr type;
-        default = null;
-      }
-    else
-      lib.mkOption { inherit type default; };
+    lib.mkOption {
+      type = lib.types.nullOr type;
+      inherit default;
+    };
 
   helpers = {
     mkStr = mkOpt lib.types.str;
@@ -19,47 +16,12 @@ rec {
     mkPort = mkOpt lib.types.port;
     mkPath = mkOpt lib.types.path;
     mkLines = mkOpt lib.types.lines;
-    mkAttrs = mkOpt lib.types.attrs;
-    mkList = elemType: mkOpt (lib.types.listOf elemType);
-    mkListOf =
-      type:
-      lib.mkOption {
-        type = lib.types.listOf type;
-        default = [ ];
-      };
-    mkAttrsOf =
-      type:
-      lib.mkOption {
-        type = lib.types.attrsOf type;
-        default = { };
-      };
-    mkStrList = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-    };
+    mkPackage = mkOpt lib.types.package;
+    mkRaw = mkOpt lib.types.raw;
     mkEnum = values: mkOpt (lib.types.enum values);
-    mkEither = t1: t2: mkOpt (lib.types.either t1 t2);
-    mkOneOf = types: mkOpt (lib.types.oneOf types);
-    mkPackage = lib.mkOption { type = lib.types.package; };
-    mkPackageOr =
-      default:
-      lib.mkOption {
-        type = lib.types.package;
-        inherit default;
-      };
-    mkRaw = lib.mkOption { type = lib.types.raw; };
-    mkRawOr =
-      default:
-      lib.mkOption {
-        type = lib.types.raw;
-        inherit default;
-      };
-    mkNullable =
-      type:
-      lib.mkOption {
-        type = lib.types.nullOr type;
-        default = null;
-      };
+    mkList = elem: mkOpt (lib.types.listOf elem);
+    mkAttrsOf = val: mkOpt (lib.types.attrsOf val);
+    mkEither = a: b: mkOpt (lib.types.either a b);
     mkSub =
       opts:
       lib.mkOption {
@@ -72,8 +34,9 @@ rec {
         type = lib.types.listOf (lib.types.submodule { options = opts; });
         default = [ ];
       };
-    mkEnable = lib.mkEnableOption;
   };
+
+  # -- scanning --------------------------------------------------------
 
   defaultExclude =
     { name, ... }:
@@ -82,18 +45,18 @@ rec {
     in
     c == "_" || c == "." || name == "flake.nix" || name == "default.nix";
 
-  scan =
-    excludeFn: dir:
+  scanDir =
+    exclude: dir:
     lib.concatLists (
       lib.mapAttrsToList (
         name: type:
         let
           path = dir + "/${name}";
         in
-        if excludeFn { inherit name path; } then
+        if exclude { inherit name path; } then
           [ ]
         else if type == "directory" then
-          scan excludeFn path
+          scanDir exclude path
         else if type == "regular" && lib.hasSuffix ".nix" name then
           [ path ]
         else
@@ -102,22 +65,160 @@ rec {
     );
 
   resolveImport =
-    excludeFn: x:
+    exclude: x:
     if builtins.isPath x then
       if lib.hasSuffix ".nix" (toString x) then
         [ x ]
       else if builtins.pathExists x then
-        scan excludeFn x
+        scanDir exclude x
       else
         [ ]
     else if builtins.isString x then
-      if builtins.substring 0 1 x == "/" then resolveImport excludeFn (/. + x) else [ ]
+      if builtins.substring 0 1 x == "/" then resolveImport exclude (/. + x) else [ ]
     else if builtins.isAttrs x then
       [ x ]
     else if builtins.isList x then
-      lib.concatMap (resolveImport excludeFn) x
+      lib.concatMap (resolveImport exclude) x
     else
-      throw "nixy: invalid import type ${builtins.typeOf x}";
+      throw "[nixy/scan] invalid import: ${builtins.typeOf x}";
+
+  loadFile =
+    x: if builtins.isPath x then lib.setDefaultModuleLocation (toString x) (import x) else x;
+
+  # -- validation ------------------------------------------------------
+
+  validName = s: builtins.match "[a-zA-Z_][a-zA-Z0-9_-]*" s != null;
+
+  reservedAny = [
+    "enable"
+    "load"
+  ];
+
+  reservedFirst = [
+    "system"
+    "target"
+    "extraModules"
+    "instantiate"
+  ];
+
+  checkPath =
+    tag: segs:
+    let
+      path = lib.concatStringsSep "." segs;
+      top = builtins.head segs;
+      badAny = lib.findFirst (s: builtins.elem s reservedAny) null segs;
+      badName = lib.findFirst (s: !(validName s)) null segs;
+    in
+    lib.throwIf (badAny != null) "[nixy/${tag}] '${path}': '${badAny}' is reserved"
+      (
+        lib.throwIf (badName != null) "[nixy/${tag}] '${path}': invalid segment '${badName}'"
+          (
+            lib.throwIf (builtins.elem top reservedFirst)
+              "[nixy/${tag}] '${path}': '${top}' is a host built-in"
+              segs
+          )
+      );
+
+  # -- schema ----------------------------------------------------------
+
+  isOption = x: builtins.isAttrs x && (x._type or null) == "option";
+
+  flattenSchema =
+    prefix: attrs:
+    lib.concatLists (
+      lib.mapAttrsToList (
+        name: value:
+        let
+          path = if prefix == "" then name else "${prefix}.${name}";
+        in
+        if isOption value then
+          let
+            _ = checkPath "schema" (lib.splitString "." path);
+          in
+          [
+            {
+              inherit path;
+              option = value;
+            }
+          ]
+        else if builtins.isAttrs value then
+          flattenSchema path value
+        else
+          throw "[nixy/schema] '${path}': expected option or attrset"
+      ) attrs
+    );
+
+  # -- module tree type ------------------------------------------------
+
+  moduleLeaf = lib.mkOptionType {
+    name = "deferredModules";
+    check = builtins.isList;
+    merge = _: defs: lib.concatMap (d: d.value) defs;
+  };
+
+  moduleTree =
+    let
+      inner = lib.mkOptionType {
+        name = "moduleTree";
+        check = builtins.isAttrs;
+        merge =
+          loc: defs:
+          let
+            bad = builtins.filter (d: !(builtins.isAttrs d.value)) defs;
+            hint =
+              if builtins.any (d: builtins.isFunction d.value) bad then
+                " (did you mean '${lib.concatStringsSep "." loc}.load = [ ... ]'?)"
+              else
+                "";
+          in
+          lib.throwIf (bad != [ ])
+            "[nixy/modules] '${lib.concatStringsSep "." loc}': expected attrset${hint}"
+            (
+              let
+                allKeys = lib.unique (lib.concatMap (d: builtins.attrNames d.value) defs);
+              in
+              lib.genAttrs allKeys (
+                key:
+                let
+                  subs = lib.concatMap (
+                    d: lib.optional (d.value ? ${key}) { inherit (d) file; value = d.value.${key}; }
+                  ) defs;
+                in
+                if key == "load" then moduleLeaf.merge (loc ++ [ key ]) subs else inner.merge (loc ++ [ key ]) subs
+              )
+            );
+      };
+    in
+    lib.mkOptionType {
+      name = "moduleTree";
+      check = builtins.isAttrs;
+      merge = inner.merge;
+    };
+
+  collectIds =
+    prefix: tree:
+    lib.concatLists (
+      lib.mapAttrsToList (
+        name: value:
+        let
+          path = if prefix == "" then name else "${prefix}.${name}";
+        in
+        if name == "load" then
+          if prefix == "" then
+            throw "[nixy/modules] 'load' cannot be a top-level key"
+          else
+            let
+              _ = checkPath "modules" (lib.splitString "." prefix);
+            in
+            [ prefix ]
+        else if builtins.isAttrs value then
+          collectIds path value
+        else
+          throw "[nixy/modules] '${path}': unexpected ${builtins.typeOf value}"
+      ) tree
+    );
+
+  # -- deep merge (for schema) -----------------------------------------
 
   deepMerge = lib.mkOptionType {
     name = "deepMerge";
@@ -125,367 +226,299 @@ rec {
     merge = _: defs: lib.foldl' lib.recursiveUpdate { } (map (d: d.value) defs);
   };
 
-  deferredModules = lib.mkOptionType {
-    name = "deferredModules";
-    check = x: builtins.isList x || builtins.isFunction x || builtins.isAttrs x;
+  # -- merged function (for perSystem) ---------------------------------
+
+  mergedFn = lib.mkOptionType {
+    name = "mergedFunction";
+    check = builtins.isFunction;
     merge =
-      loc: defs:
-      lib.concatMap (
-        d: map (lib.setDefaultModuleLocation "${d.file}, via ${lib.showOption loc}") (lib.toList d.value)
-      ) defs;
+      _: defs: args:
+      lib.foldl' lib.recursiveUpdate { } (map (d: d.value args) defs);
   };
 
-  loadModule =
-    x: if builtins.isPath x then lib.setDefaultModuleLocation (toString x) (import x) else x;
+  # -- host type tree --------------------------------------------------
 
-  mkCoreModule =
+  emptyNode = {
+    opts = { };
+    sub = { };
+  };
+
+  insertAt =
+    node: segs: f:
+    let
+      h = builtins.head segs;
+      t = builtins.tail segs;
+    in
+    if t == [ ] then
+      f node h
+    else
+      let
+        child = node.sub.${h} or emptyNode;
+      in
+      node // { sub = node.sub // { ${h} = insertAt child t f; }; };
+
+  insertOpt = node: segs: opt: insertAt node segs (n: h: n // { opts = n.opts // { ${h} = opt; }; });
+
+  insertEnable =
+    node: segs: id:
+    insertAt node segs (
+      n: h:
+      let
+        child = n.sub.${h} or emptyNode;
+      in
+      n
+      // {
+        sub = n.sub // {
+          ${h} = child // {
+            opts = child.opts // {
+              enable = lib.mkEnableOption id;
+            };
+          };
+        };
+      }
+    );
+
+  joinPath = prefix: n: if prefix == "" then n else "${prefix}.${n}";
+
+  buildOpts =
+    prefix: node:
+    let
+      clash = builtins.attrNames (builtins.intersectAttrs node.opts node.sub);
+    in
+    lib.throwIf (clash != [ ])
+      "[nixy] '${joinPath prefix (builtins.head clash)}': cannot be both option and namespace"
+      (
+        node.opts
+        // lib.mapAttrs (
+          n: child:
+          lib.mkOption {
+            type = lib.types.submodule { options = buildOpts (joinPath prefix n) child; };
+            default = { };
+          }
+        ) node.sub
+      );
+
+  builtinHostOpts = {
+    system = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+    };
+    target = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+    };
+    extraModules = lib.mkOption {
+      type = lib.types.listOf lib.types.deferredModule;
+      default = [ ];
+    };
+    instantiate = lib.mkOption {
+      type = lib.types.nullOr lib.types.raw;
+      default = null;
+    };
+  };
+
+  mkHostType =
+    schemaEntries: moduleIds:
+    let
+      t0 = lib.foldl' (acc: e: insertOpt acc (lib.splitString "." e.path) e.option) emptyNode
+        schemaEntries;
+      t1 = lib.foldl' (acc: id: insertEnable acc (lib.splitString "." id) id) t0 moduleIds;
+    in
+    lib.types.submodule { options = builtinHostOpts // buildOpts "" t1; };
+
+  # -- host build ------------------------------------------------------
+
+  resolveTarget =
+    host:
+    if host.target != null then
+      host.target
+    else if host.system != null && lib.hasSuffix "-darwin" host.system then
+      "darwin"
+    else
+      "nixos";
+
+  cleanHost =
+    host:
+    removeAttrs host [
+      "extraModules"
+      "instantiate"
+    ]
+    // { target = resolveTarget host; };
+
+  isEnabled =
+    host: id: (lib.getAttrFromPath (lib.splitString "." id ++ [ "enable" ]) host) == true;
+
+  buildHost =
+    {
+      name,
+      host,
+      moduleIds,
+      allHosts,
+      rawModules,
+      targets,
+      args,
+    }:
+    let
+      target = resolveTarget host;
+      active = builtins.filter (isEnabled host) moduleIds;
+      payload = lib.concatMap (
+        id: (lib.getAttrFromPath (lib.splitString "." id) rawModules).load
+      ) active;
+      inst =
+        if host.instantiate != null then
+          host.instantiate
+        else
+          let
+            td = targets.${target} or null;
+          in
+          if td != null then
+            td.instantiate
+          else
+            throw "[nixy/hosts] '${name}': unknown target '${target}'";
+    in
+    inst {
+      system = host.system;
+      specialArgs = {
+        inherit name target;
+        system = host.system;
+        host = cleanHost host;
+        hosts = lib.mapAttrs (_: cleanHost) allHosts;
+      } // args;
+      modules = payload ++ host.extraModules;
+    };
+
+  # -- check app -------------------------------------------------------
+
+  fmtCheckDoc =
+    {
+      schemaEntries,
+      moduleIds,
+      hostNames,
+    }:
+    let
+      fmtField =
+        e:
+        let
+          type = e.option.type.description or e.option.type.name or "?";
+          def =
+            if !(e.option ? default) then
+              "-"
+            else if e.option.default == null then
+              "`null`"
+            else
+              "`${builtins.toJSON e.option.default}`";
+        in
+        "| `${e.path}` | ${type} | ${def} |";
+      n = builtins.length;
+    in
+    lib.concatStringsSep "\n" (
+      [
+        "# Schema"
+        "> ${toString (n schemaEntries)} fields"
+      ]
+      ++ lib.optionals (schemaEntries != [ ]) [
+        "| Field | Type | Default |"
+        "|-------|------|---------|"
+        (lib.concatMapStringsSep "\n" fmtField schemaEntries)
+      ]
+      ++ [
+        ""
+        "# Modules"
+        "> ${toString (n moduleIds)}${lib.optionalString (moduleIds != [ ]) ": ${lib.concatStringsSep ", " moduleIds}"}"
+        ""
+        "# Hosts"
+        "> ${toString (n hostNames)}${lib.optionalString (hostNames != [ ]) ": ${lib.concatStringsSep ", " hostNames}"}"
+      ]
+    );
+
+  mkApp =
+    nixpkgs: system: name: script:
+    {
+      type = "app";
+      program = toString (
+        nixpkgs.legacyPackages.${system}.writeShellScript "nixy-${name}" script
+      );
+    };
+
+  # -- core module -----------------------------------------------------
+
+  defaultSystems = [
+    "x86_64-linux"
+    "aarch64-linux"
+    "aarch64-darwin"
+    "x86_64-darwin"
+  ];
+
+  mkCore =
     { nixpkgs, args }:
     { config, ... }:
     let
-      moduleEntries = lib.mapAttrsToList (
-        name: spec:
-        lib.throwIf (spec.options ? enable) "nixy: module '${name}' cannot define 'enable'" {
-          inherit name;
-          inherit (spec)
-            target
-            requires
-            options
-            module
-            ;
+      schemaEntries = flattenSchema "" config.schema;
+      moduleIds = collectIds "" config.modules;
+      hostType = mkHostType schemaEntries moduleIds;
+
+      builtHosts = lib.mapAttrs (
+        name: host:
+        buildHost {
+          inherit name host moduleIds args;
+          allHosts = config.hosts;
+          rawModules = config.modules;
+          targets = config.targets;
         }
-      ) config.modules;
+      ) config.hosts;
 
-      mkConditionalType =
-        modName: modOptions:
-        let
-          enableOnly = lib.types.submodule { options.enable = lib.mkEnableOption modName; };
-          fullType = lib.types.submodule {
-            options = {
-              enable = lib.mkEnableOption modName;
-            }
-            // modOptions;
-          };
-        in
-        lib.mkOptionType {
-          name = "conditionalModule(${modName})";
-          check = builtins.isAttrs;
-          merge =
-            loc: defs:
-            let
-              merged = lib.foldl' lib.recursiveUpdate { } (map (d: d.value) defs);
-              enabled = merged.enable or false;
-              extraKeys = builtins.filter (k: k != "enable") (builtins.attrNames merged);
-            in
-            if enabled == false && extraKeys != [ ] then
-              throw "nixy: ${lib.concatStringsSep "." loc}: options set but enable = false (keys: ${lib.concatStringsSep ", " extraKeys}). Did you forget enable = true?"
-            else if enabled == true then
-              fullType.merge loc defs
-            else
-              enableOnly.merge loc defs;
-          getSubOptions = fullType.getSubOptions;
-          getSubModules = fullType.getSubModules;
-          substSubModules = _: mkConditionalType modName modOptions;
-        };
-
-      nodeOptions = lib.listToAttrs (
-        map (
-          m:
-          lib.nameValuePair m.name (
-            lib.mkOption {
-              type = mkConditionalType m.name m.options;
-              default = { };
-            }
-          )
-        ) moduleEntries
+      hostsByTarget = lib.groupBy (n: resolveTarget config.hosts.${n}) (
+        builtins.attrNames config.hosts
       );
 
-      nodeType = lib.types.submodule {
-        options = {
-          system = lib.mkOption { type = lib.types.str; };
-          target = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-          };
-          extraModules = lib.mkOption {
-            type = lib.types.listOf lib.types.deferredModule;
-            default = [ ];
-          };
-          instantiate = lib.mkOption {
-            type = lib.types.nullOr lib.types.raw;
-            default = null;
-          };
-        }
-        // nodeOptions;
-      };
-
-      inferTarget = system: if lib.hasSuffix "-darwin" system then "darwin" else "nixos";
-
-      enrichNode =
-        name: node:
-        let
-          target = if node.target != null then node.target else inferTarget node.system;
-        in
-        {
-          inherit name target;
-          inherit (node) system;
-          raw = node;
-          clean =
-            removeAttrs node [
-              "system"
-              "target"
-              "extraModules"
-              "instantiate"
-            ]
-            // {
-              _name = name;
-              _system = node.system;
-              _target = target;
-            };
-        };
-
-      enrichedNodes = lib.mapAttrs enrichNode config.nodes;
-      allNodes = lib.mapAttrs (_: n: n.clean) enrichedNodes;
-
-      buildNode =
-        name:
-        let
-          enriched = enrichedNodes.${name};
-          checked = map (
-            m:
-            let
-              modConfig = enriched.raw.${m.name} or { };
-              enabled = modConfig.enable or false;
-              targetMatch = m.target == null || m.target == enriched.target;
-              missingDeps = lib.filter (dep: !((enriched.raw.${dep} or { }).enable or false)) m.requires;
-            in
-            {
-              inherit
-                m
-                enabled
-                targetMatch
-                missingDeps
-                ;
-              error =
-                if enabled == true && !targetMatch then
-                  "${m.name}: requires target '${m.target}', got '${enriched.target}'"
-                else if enabled == true && missingDeps != [ ] then
-                  "${m.name}: requires ${lib.concatStringsSep ", " missingDeps}"
-                else
-                  null;
-            }
-          ) moduleEntries;
-          errors = builtins.filter (e: e != null) (map (c: c.error) checked);
-          activeModules = builtins.filter (
-            c: c.enabled == true && c.targetMatch && c.m.module != [ ]
-          ) checked;
-          instantiate =
-            if enriched.raw.instantiate != null then
-              enriched.raw.instantiate
-            else
-              let
-                targetDef = config.targets.${enriched.target} or null;
-              in
-              if targetDef != null then
-                targetDef.instantiate
-              else
-                throw "nixy: node '${name}' has undefined target '${enriched.target}'";
-        in
-        lib.throwIf (errors != [ ])
-          (
-            "nixy: configuration errors in node '${name}':\n"
-            + lib.concatMapStringsSep "\n" (e: "  - ${e}") errors
-          )
-          (instantiate {
-            system = enriched.system;
-            specialArgs = {
-              inherit name;
-              system = enriched.system;
-              node = enriched.clean;
-              nodes = allNodes;
-            }
-            // args;
-            modules = lib.concatMap (c: lib.toList c.m.module) activeModules ++ enriched.raw.extraModules;
-          });
-
-      nodesByTarget = builtins.groupBy (n: enrichedNodes.${n}.target) (builtins.attrNames enrichedNodes);
-
       targetOutputs = lib.mapAttrs' (
-        target: def: lib.nameValuePair def.output (lib.genAttrs (nodesByTarget.${target} or [ ]) buildNode)
+        tgt: def:
+        lib.nameValuePair def.output (lib.genAttrs (hostsByTarget.${tgt} or [ ]) (n: builtHosts.${n}))
       ) config.targets;
 
-      perSystemOutputs = lib.genAttrs config.systems (
+      rulesErrs = map (r: r.message) (builtins.filter (r: !r.assertion) config.rules);
+      checked =
+        lib.throwIf (rulesErrs != [ ])
+          ("[nixy/rules]\n" + lib.concatMapStringsSep "\n" (e: "  - ${e}") rulesErrs)
+          targetOutputs;
+
+      perSystemResults = lib.genAttrs config.systems (
         system:
-        config.perSystem {
-          inherit system;
-          pkgs = nixpkgs.legacyPackages.${system};
-        }
+        config.perSystem (
+          {
+            inherit system lib;
+            pkgs = nixpkgs.legacyPackages.${system};
+          }
+          // args
+        )
       );
 
       mkPerSystemOutput =
-        output:
+        key:
         lib.filterAttrs (_: v: v != { }) (
-          lib.genAttrs config.systems (system: perSystemOutputs.${system}.${output} or { })
+          lib.genAttrs config.systems (s: perSystemResults.${s}.${key} or { })
         );
 
       formatter = lib.genAttrs config.systems (
         system:
         let
-          ps = perSystemOutputs.${system};
+          ps = perSystemResults.${system};
         in
-        if ps ? formatter && ps.formatter != null then
-          ps.formatter
-        else
-          nixpkgs.legacyPackages.${system}.nixfmt-rfc-style
+        if ps ? formatter then ps.formatter else nixpkgs.legacyPackages.${system}.nixfmt-rfc-style
       );
 
-      collectPaths =
-        prefix: opts:
-        lib.concatLists (
-          lib.mapAttrsToList (
-            name: opt:
-            let
-              path = if prefix == "" then name else "${prefix}.${name}";
-            in
-            if opt ? _type && opt._type == "option" then
-              [
-                {
-                  inherit path;
-                  type = opt.type.description or opt.type.name or "?";
-                  default = opt.default or null;
-                }
-              ]
-            else if builtins.isAttrs opt then
-              collectPaths path opt
-            else
-              [ ]
-          ) opts
-        );
-
-      optionsDoc =
-        let
-          moduleCount = builtins.length moduleEntries;
-          totalOptions = lib.foldl' (
-            acc: m: acc + builtins.length (collectPaths "" m.options)
-          ) 0 moduleEntries;
-          formatModule =
-            m:
-            let
-              paths = collectPaths "" m.options;
-              optCount = builtins.length paths;
-              targetBadge = if m.target != null then " [${m.target}]" else "";
-              requiresBadge = if m.requires != [ ] then " <- ${lib.concatStringsSep ", " m.requires}" else "";
-              summary = "${m.name}${targetBadge}${requiresBadge} (${toString optCount} options)";
-              body =
-                if paths == [ ] then
-                  "_No options_"
-                else
-                  ''
-                    | Option | Type | Default |
-                    |--------|------|---------|
-                    ${lib.concatMapStringsSep "\n" (
-                      p:
-                      let
-                        defStr = if p.default == null then "-" else "`${builtins.toJSON p.default}`";
-                      in
-                      "| `${p.path}` | ${p.type} | ${defStr} |"
-                    ) paths}'';
-            in
-            "<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>";
-        in
-        "# Modules\n\n> ${toString moduleCount} modules, ${toString totalOptions} options\n\n${
-          lib.concatMapStringsSep "\n\n" formatModule moduleEntries
-        }\n";
-
-      nodesDoc =
-        let
-          nodeCount = builtins.length (builtins.attrNames enrichedNodes);
-          byTarget = lib.groupBy (n: enrichedNodes.${n}.target) (builtins.attrNames enrichedNodes);
-          formatNode =
-            name:
-            let
-              e = enrichedNodes.${name};
-              enabledMods = lib.filter (m: (e.raw.${m.name} or { }).enable or false) moduleEntries;
-              modCount = builtins.length enabledMods;
-              summary = "${name} [${e.system}] (${toString modCount} modules)";
-              body =
-                if enabledMods == [ ] then
-                  "_No modules enabled_"
-                else
-                  lib.concatMapStringsSep "\n" (m: "- ${m.name}") enabledMods;
-            in
-            "<details>\n<summary>${summary}</summary>\n\n${body}\n\n</details>";
-          formatTarget = target: nodes: "### ${target}\n\n${lib.concatMapStringsSep "\n\n" formatNode nodes}";
-        in
-        "# Nodes\n\n> ${toString nodeCount} nodes\n\n${lib.concatStringsSep "\n\n" (lib.mapAttrsToList formatTarget byTarget)}\n";
-
-      optionsCheck =
-        let
-          collectMissing =
-            prefix: opts:
-            lib.concatLists (
-              lib.mapAttrsToList (
-                name: opt:
-                let
-                  path = if prefix == "" then name else "${prefix}.${name}";
-                in
-                if opt ? _type && opt._type == "option" then
-                  (if opt ? default then [ ] else [ path ])
-                else if builtins.isAttrs opt then
-                  collectMissing path opt
-                else
-                  [ ]
-              ) opts
-            );
-          modulesWithMissing = lib.filter (m: m.missing != [ ]) (
-            map (m: {
-              inherit (m) name target;
-              missing = collectMissing "" m.options;
-            }) moduleEntries
-          );
-          totalMissing = lib.foldl' (acc: m: acc + builtins.length m.missing) 0 modulesWithMissing;
-        in
-        if modulesWithMissing == [ ] then
-          "All options have default values.\n"
-        else
-          "# Missing Defaults\n\n> ${toString totalMissing} options in ${toString (builtins.length modulesWithMissing)} modules\n\n${
-            lib.concatMapStringsSep "\n\n" (
-              m:
-              let
-                targetStr = if m.target != null then " [${m.target}]" else "";
-              in
-              "<details>\n<summary>${m.name}${targetStr} (${toString (builtins.length m.missing)})</summary>\n\n${
-                lib.concatMapStringsSep "\n" (p: "- `${p}`") m.missing
-              }\n\n</details>"
-            ) modulesWithMissing
-          }\n";
-
-      optionsCheckFailed = lib.hasPrefix "# Missing" optionsCheck;
-
-      mkApp = system: name: script: {
-        type = "app";
-        program = toString (nixpkgs.legacyPackages.${system}.writeShellScript "nixy-${name}" script);
+      checkDoc = fmtCheckDoc {
+        inherit schemaEntries moduleIds;
+        hostNames = builtins.attrNames config.hosts;
       };
 
-      builtinApps = lib.genAttrs config.systems (system: {
-        allOptions = mkApp system "options" "cat <<'EOF'\n${optionsDoc}EOF";
-        allNodes = mkApp system "nodes" "cat <<'EOF'\n${nodesDoc}EOF";
-        checkOptions =
-          mkApp system "check"
-            "cat <<'EOF'\n${optionsCheck}EOF\n${lib.optionalString optionsCheckFailed "exit 1"}";
-      });
-
-      rulesErrors = map (r: r.message) (builtins.filter (r: r.assertion == false) config.rules);
-      checkRules = lib.throwIf (rulesErrors != [ ]) (
-        "nixy: rules failed:\n" + lib.concatMapStringsSep "\n" (e: "  - ${e}") rulesErrors
-      ) true;
-      targetOutputsChecked = lib.mapAttrs (
-        _: configs:
-        lib.mapAttrs (
-          _: cfg:
-          assert checkRules;
-          cfg
-        ) configs
-      ) targetOutputs;
+      apps = lib.genAttrs config.systems (
+        system:
+        (perSystemResults.${system}.apps or { })
+        // {
+          check = mkApp nixpkgs system "check" "cat <<'NIXY_EOF'\n${checkDoc}\nNIXY_EOF";
+        }
+      );
     in
     {
       _file = "<nixy/core>";
@@ -493,36 +526,24 @@ rec {
       options = {
         systems = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          default = [
-            "x86_64-linux"
-            "aarch64-linux"
-            "aarch64-darwin"
-            "x86_64-darwin"
-          ];
+          default = defaultSystems;
+          description = "Systems for perSystem outputs.";
+        };
+        perSystem = lib.mkOption {
+          type = mergedFn;
+          default = _: { };
+          description = "Per-system outputs. Multiple definitions are deep-merged.";
+        };
+        schema = lib.mkOption {
+          type = deepMerge;
+          default = { };
         };
         modules = lib.mkOption {
-          type = lib.types.attrsOf (
-            lib.types.submodule {
-              options = {
-                target = lib.mkOption {
-                  type = lib.types.nullOr lib.types.str;
-                  default = null;
-                };
-                requires = lib.mkOption {
-                  type = lib.types.listOf lib.types.str;
-                  default = [ ];
-                };
-                options = lib.mkOption {
-                  type = deepMerge;
-                  default = { };
-                };
-                module = lib.mkOption {
-                  type = deferredModules;
-                  default = [ ];
-                };
-              };
-            }
-          );
+          type = moduleTree;
+          default = { };
+        };
+        hosts = lib.mkOption {
+          type = lib.types.attrsOf hostType;
           default = { };
         };
         targets = lib.mkOption {
@@ -536,10 +557,6 @@ rec {
           );
           default = { };
         };
-        nodes = lib.mkOption {
-          type = lib.types.attrsOf nodeType;
-          default = { };
-        };
         rules = lib.mkOption {
           type = lib.types.listOf (
             lib.types.submodule {
@@ -550,10 +567,6 @@ rec {
             }
           );
           default = [ ];
-        };
-        perSystem = lib.mkOption {
-          type = lib.types.functionTo (lib.types.lazyAttrsOf lib.types.raw);
-          default = _: { };
         };
         flake = lib.mkOption {
           type = lib.types.submoduleWith {
@@ -567,54 +580,56 @@ rec {
         targets.nixos = {
           instantiate =
             {
-              system,
               modules,
               specialArgs,
+              system ? null,
             }:
-            if lib ? nixosSystem then
-              lib.nixosSystem { inherit system modules specialArgs; }
-            else
-              import (nixpkgs.legacyPackages.${system}.path + "/nixos/lib/eval-config.nix") {
-                inherit system modules specialArgs;
-              };
+            lib.nixosSystem (
+              { inherit modules specialArgs; } // lib.optionalAttrs (system != null) { inherit system; }
+            );
           output = "nixosConfigurations";
         };
-        flake =
-          lib.mapAttrs (_: lib.mkDefault) targetOutputsChecked
+
+        flake = lib.mapAttrs (_: lib.mkDefault) (
+          checked
           // {
-            formatter = lib.mkDefault formatter;
+            inherit formatter apps;
           }
-          // {
-            apps = lib.mkDefault (
-              lib.genAttrs config.systems (sys: (perSystemOutputs.${sys}.apps or { }) // builtinApps.${sys})
-            );
-          }
-          // lib.genAttrs [ "packages" "devShells" "checks" "legacyPackages" ] (
-            o: lib.mkDefault (mkPerSystemOutput o)
-          );
+          // lib.genAttrs [
+            "packages"
+            "devShells"
+            "checks"
+            "legacyPackages"
+          ] mkPerSystemOutput
+        );
       };
     };
+in
+{
+  meta.version = "0.4.0";
+  inherit helpers;
 
   eval =
     {
       nixpkgs,
-      imports,
-      args,
-      exclude,
+      imports ? [ ],
+      args ? { },
+      exclude ? null,
     }:
     let
       excludeFn = if exclude != null then exclude else defaultExclude;
-      allModules = lib.concatMap (resolveImport excludeFn) (lib.toList imports);
-      coreModule = mkCoreModule { inherit nixpkgs args; };
+      resolved = lib.concatMap (resolveImport excludeFn) (lib.toList imports);
+      core = mkCore { inherit nixpkgs args; };
       evaluated = lib.evalModules {
         class = "nixy";
-        modules = map loadModule allModules ++ [ coreModule ];
-        specialArgs = {
-          inherit lib nixpkgs;
-          pkgsFor = system: nixpkgs.legacyPackages.${system};
-        }
-        // helpers
-        // args;
+        modules = map loadFile resolved ++ [ core ];
+        specialArgs =
+          {
+            inherit lib nixpkgs;
+            pkgsFor = system: nixpkgs.legacyPackages.${system};
+          }
+          // helpers
+          // args;
       };
     in
     lib.filterAttrs (_: v: v != { }) evaluated.config.flake;
