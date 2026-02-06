@@ -34,11 +34,4 @@
 | `system` | 系统字符串 |
 | `target` | 解析后的 target |
 
-## enable
 
-每个模块会自动获得一个 `enable` 选项。如果模块未启用，设置在上面的选项会被忽略。
-
-```nix
-hosts.server.ssh.enable = true;
-hosts.server.ssh.port = 2222;
-```

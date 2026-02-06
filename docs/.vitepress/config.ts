@@ -5,7 +5,9 @@ export default defineConfig({
   description: 'Lightweight NixOS/Darwin/Home Manager framework',
   base: '/nixy/',
 
-  head: [],
+  head: [
+    ['link', { rel: 'icon', href: '/nixy/logo.svg' }],
+  ],
 
   locales: {
     root: {
@@ -83,6 +85,8 @@ export default defineConfig({
   },
 
   themeConfig: {
+    logo: '/logo.svg',
+    siteTitle: false,
     socialLinks: [
       { icon: 'github', link: 'https://github.com/anialic/nixy' },
     ],
