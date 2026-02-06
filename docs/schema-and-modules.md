@@ -34,11 +34,4 @@ A list of NixOS/Darwin/HM modules that get loaded when the module is enabled on 
 | `system` | System string |
 | `target` | Resolved target |
 
-## enable
 
-Every module gets an `enable` option automatically. If a module is not enabled, any options set on it are silently ignored.
-
-```nix
-hosts.server.ssh.enable = true;
-hosts.server.ssh.port = 2222;
-```
