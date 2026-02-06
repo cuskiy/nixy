@@ -1,13 +1,11 @@
 # API Reference
 
-## Entry Points
+## Entry Point
 
-### mkFlake
-
-Main entry point for flake-based configurations.
+### nixy.eval
 
 ```nix
-nixy.mkFlake {
+nixy.eval {
   nixpkgs;
   imports ? [ ];
   args ? { };
@@ -17,81 +15,62 @@ nixy.mkFlake {
 
 Returns a flake outputs attrset.
 
-### mkConfiguration
+## Framework Options
 
-Alias for `mkFlake`. Use for non-flake setups:
+### schema
+
+Deep-merged option declarations:
 
 ```nix
-nixy.mkConfiguration {
-  nixpkgs;
-  imports = [ ./. ];
-}
+schema.myModule.setting = mkStr "default";
 ```
 
-## Framework Module Arguments
+### modules
 
-Available in framework modules (files defining `modules.*`):
+Module tree with `load` leaves:
 
-| Argument | Type | Description |
-|----------|------|-------------|
-| `lib` | attrset | nixpkgs.lib |
-| `nixpkgs` | attrset | nixpkgs input |
-| `config` | attrset | Framework configuration |
-| `pkgsFor` | function | `system -> pkgs` |
-| `mkStr`, etc. | function | Option helpers |
+```nix
+modules.myModule.load = [({ host, ... }: { ... })];
+```
 
-## NixOS/Darwin/HM Module Arguments
+### hosts
 
-Available in `modules.*.module`:
+Host definitions:
 
-| Argument | Type | Description |
-|----------|------|-------------|
-| `node` | attrset | Current node config |
-| `nodes` | attrset | All node configs |
-| `name` | string | Node name |
-| `system` | string | System string |
+```nix
+hosts.myHost = {
+  system = "x86_64-linux";
+  myModule.enable = true;
+  myModule.setting = "value";
+};
+```
 
-Plus anything passed via `args`.
+### targets
 
-## Flake Outputs
-
-Nixy generates:
-
-- `nixosConfigurations.<name>`
-- `darwinConfigurations.<name>`
-- `homeConfigurations.<name>`
-- `formatter.<system>`
-- `apps.<system>.{allOptions,allNodes,checkOptions}`
-- Custom outputs via `perSystem` and `flake.*`
-
-## targets
-
-Define custom targets:
+Custom target builders:
 
 ```nix
 targets.darwin = {
-  instantiate = { system, modules, specialArgs }:
-    nix-darwin.lib.darwinSystem { inherit system modules specialArgs; };
+  instantiate = { system, modules, specialArgs }: ...;
   output = "darwinConfigurations";
 };
 ```
 
-## rules
+Built-in: `nixos`.
+
+### rules
 
 Build-time assertions:
 
 ```nix
 rules = [
-  {
-    assertion = config.nodes ? server;
-    message = "server node must be defined";
-  }
+  { assertion = config.hosts ? server; message = "server host required"; }
 ];
 ```
 
-## perSystem
+### perSystem
 
-Per-system outputs:
+Per-system outputs. Multiple definitions are deep-merged:
 
 ```nix
 perSystem = { pkgs, system }: {
@@ -101,11 +80,18 @@ perSystem = { pkgs, system }: {
 };
 ```
 
-## flake
+### flake
 
 Extra flake outputs:
 
 ```nix
 flake.overlays.default = final: prev: { };
-flake.lib.myHelper = x: x;
+flake.deploy.nodes = { ... };
 ```
+
+## Generated Outputs
+
+- `nixosConfigurations.<n>` (and custom target outputs)
+- `formatter.<s>`
+- `apps.<s>.check`
+- `packages.<s>.*`, `devShells.<s>.*`, etc. (from `perSystem`)

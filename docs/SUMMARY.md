@@ -6,14 +6,15 @@
 
 - [Getting Started](./getting-started.md)
 - [Configuration](./configuration.md)
-- [Modules](./modules.md)
-- [Nodes](./nodes.md)
+- [Schema & Modules](./schema-and-modules.md)
+- [Hosts](./hosts.md)
 
 # Reference
 
 - [Helpers](./helpers.md)
+- [API](./api.md)
 
 # Examples
 
-- [Multi-platform](./examples/multi-platform.md)
-- [Deploy-rs](./examples/deploy-rs.md)
+- [Minimal](./examples/minimal.md)
+- [Complex](./examples/complex.md)

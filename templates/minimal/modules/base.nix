@@ -1,20 +1,20 @@
 { mkStr, ... }:
 {
-  modules.base = {
-    target = "nixos";
-    options = {
-      hostName = mkStr null;
-      user = mkStr null;
-      timeZone = mkStr "UTC";
-    };
-    module =
-      { node, ... }:
+  schema.base = {
+    hostName = mkStr null;
+    user = mkStr null;
+    timeZone = mkStr "UTC";
+  };
+
+  modules.base.load = [
+    (
+      { host, ... }:
       {
         boot.loader.systemd-boot.enable = true;
         boot.loader.efi.canTouchEfiVariables = true;
-        networking.hostName = node.base.hostName;
-        time.timeZone = node.base.timeZone;
-        users.users.${node.base.user} = {
+        networking.hostName = host.base.hostName;
+        time.timeZone = host.base.timeZone;
+        users.users.${host.base.user} = {
           isNormalUser = true;
           extraGroups = [
             "wheel"
@@ -22,11 +22,12 @@
           ];
           initialPassword = "changeme";
         };
-        system.stateVersion = "24.11";
+        system.stateVersion = "26.05";
         nix.settings.experimental-features = [
           "nix-command"
           "flakes"
         ];
-      };
-  };
+      }
+    )
+  ];
 }

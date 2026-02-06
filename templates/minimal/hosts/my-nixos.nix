@@ -1,5 +1,5 @@
 {
-  nodes.my-nixos = {
+  hosts.my-nixos = {
     system = "x86_64-linux";
     base.enable = true;
     base.hostName = "my-nixos";

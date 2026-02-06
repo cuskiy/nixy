@@ -1,23 +1,25 @@
 # Configuration
 
-## mkFlake / mkConfiguration
+## nixy.eval
 
 ```nix
-nixy.mkFlake {
-  nixpkgs;          # required - nixpkgs input
-  imports ? [ ];    # directories or files to scan
+nixy.eval {
+  nixpkgs;          # required
+  imports ? [ ];    # directories, files, or inline modules
   args ? { };       # passed to all modules
   exclude ? null;   # filter function
 }
 ```
 
+Returns a flake outputs attrset.
+
 ### imports
 
-Accepts paths, directories, or inline modules:
+Accepts paths, directories, or inline attrsets:
 
 ```nix
 imports = [
-  ./.           # scan current directory
+  ./.           # scan current directory recursively
   ./modules     # scan specific directory
   ./special.nix # single file
   { ... }       # inline module
@@ -26,10 +28,10 @@ imports = [
 
 ### args
 
-Passed to framework modules and NixOS/Darwin/HM modules:
+Extra arguments passed to framework modules and NixOS/Darwin/HM modules via `specialArgs`:
 
 ```nix
-args = { inherit inputs; myCustomArg = "value"; };
+args = { inherit inputs; myArg = "value"; };
 ```
 
 ### exclude
@@ -45,10 +47,11 @@ exclude = { name, path }:
 
 | Option | Description |
 |--------|-------------|
-| `systems` | Target systems (default: x86_64/aarch64 linux/darwin) |
-| `modules.*` | Module definitions |
-| `nodes.*` | Node definitions |
+| `systems` | Systems for `perSystem` (default: x86_64/aarch64 linux/darwin) |
+| `schema.*` | Option declarations (deep-merged across files) |
+| `modules.*` | Module load lists (merged across files) |
+| `hosts.*` | Host definitions |
 | `targets.*` | Target builders |
 | `rules` | Build-time assertions |
-| `perSystem` | Per-system outputs |
+| `perSystem` | Per-system outputs (deep-merged across files) |
 | `flake.*` | Extra flake outputs |
