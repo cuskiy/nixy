@@ -1,6 +1,6 @@
-# Minimal Setup
+# 最小配置
 
-A single NixOS machine with a base module.
+单台 NixOS 机器加一个 base 模块。
 
 ```bash
 nix flake init -t github:anialic/nixy#minimal

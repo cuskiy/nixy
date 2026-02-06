@@ -10,7 +10,7 @@
           path = ./templates/minimal;
         };
         complex = {
-          description = "Multi-platform with deploy-rs, custom targets, and assertions";
+          description = "Multi-platform with disko and deploy-rs";
           path = ./templates/complex;
         };
       };

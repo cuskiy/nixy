@@ -1,13 +1,29 @@
-# Minimal Setup
+# 快速开始
 
-A single NixOS machine with a base module.
+## 安装
+
+从模板初始化：
 
 ```bash
 nix flake init -t github:anialic/nixy#minimal
 ```
 
-## flake.nix
+有两个模板可用：`minimal` 适合单机 NixOS，`complex` 是含 disko 和 deploy-rs 的多平台配置。
 
+## 项目结构
+
+```
+my-config/
+├── flake.nix
+├── modules/
+│   └── base.nix
+└── hosts/
+    └── my-nixos.nix
+```
+
+## 基本配置
+
+**flake.nix**
 ```nix
 {
   inputs = {
@@ -23,8 +39,7 @@ nix flake init -t github:anialic/nixy#minimal
 }
 ```
 
-## modules/base.nix
-
+**modules/base.nix**
 ```nix
 { mkStr, ... }:
 {
@@ -50,8 +65,7 @@ nix flake init -t github:anialic/nixy#minimal
 }
 ```
 
-## hosts/my-nixos.nix
-
+**hosts/my-nixos.nix**
 ```nix
 {
   hosts.my-nixos = {
@@ -73,6 +87,8 @@ nix flake init -t github:anialic/nixy#minimal
   };
 }
 ```
+
+## 构建
 
 ```bash
 nixos-rebuild switch --flake .#my-nixos

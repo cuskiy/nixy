@@ -5,7 +5,7 @@
   ...
 }:
 let
-  deployHosts = lib.filterAttrs (_: h: h.deploy.enable or false) config.hosts;
+  deployHosts = lib.filterAttrs (_: h: h.deploy.hostname != null) config.hosts;
 in
 {
   flake.deploy.nodes = lib.mapAttrs (
@@ -27,7 +27,6 @@ in
     { pkgs, ... }:
     {
       formatter = pkgs.nixfmt-rfc-style;
-      packages.greeting = pkgs.writeShellScriptBin "greeting" ''echo "Hello from nixy"'';
     };
 
   rules = [
