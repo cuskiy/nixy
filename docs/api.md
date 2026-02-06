@@ -1,8 +1,8 @@
 # API Reference
 
-## Entry Point
+## nixy.eval
 
-### nixy.eval
+The main entry point. Returns a flake outputs attrset.
 
 ```nix
 nixy.eval {
@@ -13,41 +13,9 @@ nixy.eval {
 }
 ```
 
-Returns a flake outputs attrset.
+## targets
 
-## Framework Options
-
-### schema
-
-Deep-merged option declarations:
-
-```nix
-schema.myModule.setting = mkStr "default";
-```
-
-### modules
-
-Module tree with `load` leaves:
-
-```nix
-modules.myModule.load = [({ host, ... }: { ... })];
-```
-
-### hosts
-
-Host definitions:
-
-```nix
-hosts.myHost = {
-  system = "x86_64-linux";
-  myModule.enable = true;
-  myModule.setting = "value";
-};
-```
-
-### targets
-
-Custom target builders:
+Define how hosts of a given target are built. The `nixos` target is built-in; everything else needs to be registered here.
 
 ```nix
 targets.darwin = {
@@ -56,11 +24,9 @@ targets.darwin = {
 };
 ```
 
-Built-in: `nixos`.
+## rules
 
-### rules
-
-Build-time assertions:
+Assertions that are checked at build time. If any assertion fails, the build is aborted with the corresponding message.
 
 ```nix
 rules = [
@@ -68,9 +34,9 @@ rules = [
 ];
 ```
 
-### perSystem
+## perSystem
 
-Per-system outputs. Multiple definitions are deep-merged:
+Per-system outputs like packages, dev shells, and formatters.
 
 ```nix
 perSystem = { pkgs, system }: {
@@ -80,9 +46,9 @@ perSystem = { pkgs, system }: {
 };
 ```
 
-### flake
+## flake
 
-Extra flake outputs:
+Arbitrary extra flake outputs.
 
 ```nix
 flake.overlays.default = final: prev: { };
@@ -91,7 +57,9 @@ flake.deploy.nodes = { ... };
 
 ## Generated Outputs
 
-- `nixosConfigurations.<n>` (and custom target outputs)
-- `formatter.<s>`
-- `apps.<s>.check`
-- `packages.<s>.*`, `devShells.<s>.*`, etc. (from `perSystem`)
+Nixy produces the following flake outputs:
+
+- `nixosConfigurations.<name>` and any custom target outputs
+- `formatter.<system>`
+- `apps.<system>.check`
+- `packages`, `devShells`, `checks`, `legacyPackages` from `perSystem`

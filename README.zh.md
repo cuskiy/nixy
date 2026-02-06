@@ -3,26 +3,26 @@
 </p>
 
 <p align="center">
-  Lightweight NixOS/Darwin/Home Manager framework
+  轻量级 NixOS/Darwin/Home Manager 框架
 </p>
 
 <p align="center">
-  <a href="https://anialic.github.io/nixy">Documentation</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#templates">Templates</a>
+  <a href="https://anialic.github.io/nixy">文档</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#模板">模板</a>
 </p>
 
 ---
 
-## Quick Start
+## 快速开始
 
 ```bash
 nix flake init -t github:anialic/nixy#minimal
 ```
 
-## Overview
+## 概述
 
-Nixy organizes NixOS configurations around **hosts** and **modules**:
+Nixy 围绕 **hosts** 和 **modules** 组织 NixOS 配置：
 
 ```nix
 { mkStr, mkPort, ... }:
@@ -36,7 +36,7 @@ Nixy organizes NixOS configurations around **hosts** and **modules**:
 }
 ```
 
-Hosts declare which modules they need:
+主机声明需要哪些模块：
 
 ```nix
 hosts.server = {
@@ -46,7 +46,7 @@ hosts.server = {
 };
 ```
 
-## Usage
+## 使用
 
 ```nix
 {
@@ -63,17 +63,17 @@ hosts.server = {
 }
 ```
 
-## Templates
+## 模板
 
-| Template | Description |
-|----------|-------------|
-| `minimal` | Single NixOS machine |
-| `complex` | Multi-platform with disko and deploy-rs |
+| 模板 | 说明 |
+|------|------|
+| `minimal` | 单机 NixOS |
+| `complex` | 多平台，含 disko 和 deploy-rs |
 
 ```bash
 nix flake init -t github:anialic/nixy#<template>
 ```
 
-## License
+## 许可
 
 Apache-2.0

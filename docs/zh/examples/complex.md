@@ -1,6 +1,6 @@
-# Complex Setup
+# 复杂配置
 
-A multi-platform configuration with disko for disk management, deploy-rs for remote deployment, and custom targets for Darwin and Home Manager.
+多平台配置，使用 disko 管理磁盘、deploy-rs 远程部署，并为 Darwin 和 Home Manager 注册了自定义 targets。
 
 ```bash
 nix flake init -t github:anialic/nixy#complex
@@ -167,7 +167,7 @@ nix flake init -t github:anialic/nixy#complex
 
 ## custom.nix
 
-This file wires up deploy-rs, defines per-system outputs, and adds a rule requiring a `server` host.
+这个文件负责接入 deploy-rs、定义 per-system 输出，以及添加要求 `server` host 存在的断言。
 
 ```nix
 { lib, config, inputs, ... }:
@@ -230,7 +230,7 @@ in {
 }
 ```
 
-## Commands
+## 命令
 
 ```bash
 nixos-rebuild switch --flake .#server

@@ -4,6 +4,4 @@
     hostname = mkStr null;
     sshUser = mkStr "root";
   };
-
-  modules.deploy.load = [ ];
 }

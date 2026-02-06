@@ -2,41 +2,41 @@
 
 ## nixy.eval
 
+The main entry point. It takes your configuration and returns a flake outputs attrset.
+
 ```nix
 nixy.eval {
-  nixpkgs;          # required
-  imports ? [ ];    # directories, files, or inline modules
-  args ? { };       # passed to all modules
-  exclude ? null;   # filter function
+  nixpkgs;
+  imports ? [ ];
+  args ? { };
+  exclude ? null;
 }
 ```
 
-Returns a flake outputs attrset.
-
 ### imports
 
-Accepts paths, directories, or inline attrsets:
+Directories are scanned recursively for `.nix` files. You can also pass individual files or inline attrsets.
 
 ```nix
 imports = [
-  ./.           # scan current directory recursively
-  ./modules     # scan specific directory
-  ./special.nix # single file
-  { ... }       # inline module
+  ./.
+  ./modules
+  ./special.nix
+  { hosts.extra = { ... }; }
 ];
 ```
 
 ### args
 
-Extra arguments passed to framework modules and NixOS/Darwin/HM modules via `specialArgs`:
+Everything in `args` is passed through to both framework modules and NixOS/Darwin/HM modules via `specialArgs`.
 
 ```nix
-args = { inherit inputs; myArg = "value"; };
+args = { inherit inputs; };
 ```
 
 ### exclude
 
-Filter scanned files. Default excludes `_*`, `.*`, `flake.nix`, `default.nix`:
+Controls which files are skipped during directory scanning. By default, files starting with `_` or `.`, as well as `flake.nix` and `default.nix`, are excluded.
 
 ```nix
 exclude = { name, path }:
@@ -47,11 +47,11 @@ exclude = { name, path }:
 
 | Option | Description |
 |--------|-------------|
-| `systems` | Systems for `perSystem` (default: x86_64/aarch64 linux/darwin) |
-| `schema.*` | Option declarations (deep-merged across files) |
-| `modules.*` | Module load lists (merged across files) |
+| `systems` | Systems for `perSystem`, defaults to x86_64/aarch64 linux/darwin |
+| `schema.*` | Option declarations |
+| `modules.*` | Module load lists |
 | `hosts.*` | Host definitions |
 | `targets.*` | Target builders |
 | `rules` | Build-time assertions |
-| `perSystem` | Per-system outputs (deep-merged across files) |
+| `perSystem` | Per-system outputs |
 | `flake.*` | Extra flake outputs |
