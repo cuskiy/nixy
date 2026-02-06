@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Nixy',
   description: 'Lightweight NixOS/Darwin/Home Manager framework',
+  base: '/nixy/',
 
   head: [
     ['link', { rel: 'icon', href: '/logo.svg' }],
