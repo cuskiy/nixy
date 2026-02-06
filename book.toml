@@ -10,3 +10,8 @@ build-dir = "book"
 [output.html]
 git-repository-url = "https://github.com/anialic/nixy"
 edit-url-template = "https://github.com/anialic/nixy/edit/main/{path}"
+
+default-theme = "navy"
+preferred-dark-theme = "navy"
+smart-punctuation = true
+copy-fonts = true
