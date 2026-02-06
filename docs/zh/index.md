@@ -5,9 +5,6 @@ hero:
   name: Nixy
   text: NixOS 框架
   tagline: 轻量级 NixOS/Darwin/Home Manager 框架
-  image:
-    src: /logo.svg
-    alt: Nixy
   actions:
     - theme: brand
       text: 快速开始

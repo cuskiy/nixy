@@ -5,9 +5,6 @@ hero:
   name: Nixy
   text: NixOS framework
   tagline: Lightweight NixOS/Darwin/Home Manager framework
-  image:
-    src: /logo.svg
-    alt: Nixy
   actions:
     - theme: brand
       text: Getting Started
