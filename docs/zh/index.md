@@ -2,9 +2,6 @@
 layout: home
 
 hero:
-  image:
-    src: /logo.svg
-    alt: Nixy
   tagline: 轻量级 NixOS/Darwin/Home Manager 框架
   actions:
     - theme: brand
