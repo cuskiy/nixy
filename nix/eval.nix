@@ -416,148 +416,7 @@ let
       modules = payload ++ host.extraModules;
     };
 
-  # -- show ------------------------------------------------------------
-
-  isCallable = x: builtins.isFunction x || (builtins.isAttrs x && x ? __functor);
-
-  getFnArgs =
-    x:
-    if x ? __functionArgs then
-      x.__functionArgs
-    else if builtins.isFunction x then
-      builtins.functionArgs x
-    else
-      { };
-
-  classifyModule =
-    sArgs: m:
-    if builtins.isPath m then
-      { type = "external"; src = toString m; }
-    else if isCallable m then
-      let
-        fargs = getFnArgs m;
-        needsNixos = fargs ? config || fargs ? pkgs || fargs ? options || fargs ? modulesPath;
-      in
-      if needsNixos then
-        { type = "external"; src = m._file or null; }
-      else
-        let
-          result = builtins.tryEval (
-            let
-              r = m sArgs;
-            in
-            if builtins.isAttrs r then removeAttrs r [ "_file" "key" ] else r
-          );
-        in
-        if result.success then
-          { type = "resolved"; value = result.value; }
-        else
-          { type = "external"; src = m._file or null; }
-    else if builtins.isAttrs m then
-      { type = "resolved"; value = removeAttrs m [ "_file" "key" ]; }
-    else
-      { type = "external"; src = null; };
-
-  isNixIdent = s: builtins.match "[a-zA-Z_][a-zA-Z0-9_'-]*" s != null;
-
-  prettyNix =
-    let
-      go =
-        indent: value:
-        let
-          ind = indent + "  ";
-          tried = builtins.tryEval (builtins.seq value value);
-        in
-        if !tried.success then
-          "«error»"
-        else
-          let
-            v = tried.value;
-          in
-          if v == null then
-            "null"
-          else if v == true then
-            "true"
-          else if v == false then
-            "false"
-          else if builtins.isInt v then
-            toString v
-          else if builtins.isFloat v then
-            toString v
-          else if builtins.isString v then
-            builtins.toJSON v
-          else if builtins.isPath v then
-            toString v
-          else if builtins.isFunction v then
-            "«function»"
-          else if builtins.isList v then
-            if v == [ ] then
-              "[ ]"
-            else
-              "[\n" + lib.concatMapStringsSep "\n" (x: "${ind}${go ind x}") v + "\n${indent}]"
-          else if builtins.isAttrs v then
-            if lib.isDerivation v then
-              "«derivation ${v.name or "?"}»"
-            else if v ? _type then
-              let
-                t = v._type;
-              in
-              if t == "if" then
-                "(lib.mkIf ${go indent v.condition} ${go indent v.content})"
-              else if t == "override" then
-                let
-                  p = v.priority;
-                in
-                if p == 1000 then
-                  "(lib.mkDefault ${go indent v.content})"
-                else if p == 50 then
-                  "(lib.mkForce ${go indent v.content})"
-                else
-                  "(lib.mkOverride ${toString p} ${go indent v.content})"
-              else if t == "merge" then
-                "(lib.mkMerge ${go indent v.contents})"
-              else if t == "order" then
-                let
-                  p = v.priority;
-                in
-                if p == 500 then
-                  "(lib.mkBefore ${go indent v.content})"
-                else if p == 1500 then
-                  "(lib.mkAfter ${go indent v.content})"
-                else
-                  "(lib.mkOrder ${toString p} ${go indent v.content})"
-              else
-                goAttrs indent v
-            else
-              goAttrs indent v
-          else
-            "«${builtins.typeOf v}»";
-
-      goAttrs =
-        indent: attrs:
-        let
-          ind = indent + "  ";
-          names = builtins.filter (
-            n: n != "_type" && n != "_file" && n != "key" && n != "__functor" && n != "__functionArgs"
-          ) (builtins.attrNames attrs);
-        in
-        if names == [ ] then
-          "{ }"
-        else
-          "{\n"
-          + lib.concatMapStringsSep "\n" (
-            name:
-            let
-              nameStr = if isNixIdent name then name else builtins.toJSON name;
-              val = builtins.tryEval attrs.${name};
-            in
-            "${ind}${nameStr} = ${if val.success then go ind val.value else "«error»"};"
-          ) names
-          + "\n${indent}}";
-    in
-    go;
-
-  # -- check app -------------------------------------------------------
+  # -- check ------------------------------------------------------------
 
   fmtCheckDoc =
     {
@@ -578,7 +437,7 @@ let
             else
               "`${builtins.toJSON e.option.default}`";
         in
-        "| `${e.path}` | ${def} | ${type} |";
+        "| `${e.path}` | ${type} | ${def} |";
       n = builtins.length;
     in
     lib.concatStringsSep "\n" (
@@ -587,7 +446,7 @@ let
         "> ${toString (n schemaEntries)} fields"
       ]
       ++ lib.optionals (schemaEntries != [ ]) [
-        "| Field | Default | Type |"
+        "| Field | Type | Default |"
         "|-------|---------|------|"
         (lib.concatMapStringsSep "\n" fmtField schemaEntries)
       ]
@@ -685,74 +544,11 @@ let
         hostNames = builtins.attrNames config.hosts;
       };
 
-      mkShowDoc =
-        name: host:
-        let
-          target = resolveTarget host;
-          active = builtins.filter (isEnabled host) moduleIds;
-          payload = lib.concatMap (
-            id: (lib.getAttrFromPath (lib.splitString "." id) config.modules).load
-          ) active;
-          allMods = payload ++ host.extraModules;
-
-          sArgs =
-            {
-              inherit lib name target;
-              system = host.system;
-              host = cleanHost host;
-              hosts = lib.mapAttrs (_: cleanHost) config.hosts;
-            }
-            // args;
-
-          classified = map (classifyModule sArgs) allMods;
-          resolvedList = map (c: c.value) (
-            builtins.filter (c: c.type == "resolved") classified
-          );
-          external = builtins.filter (c: c.type == "external") classified;
-
-          merged = lib.foldl' lib.recursiveUpdate { } resolvedList;
-          innerImports = merged.imports or [ ];
-          mergedClean = removeAttrs merged [ "imports" ];
-
-          fmtExtSrc =
-            e:
-            if builtins.isPath e then
-              toString e
-            else if builtins.isAttrs e && e ? _file then
-              e._file
-            else
-              "«inline module»";
-
-          header = lib.concatStringsSep "\n" (
-            [ "# ${name} (${host.system} → ${target})" ]
-            ++ lib.optional (active != [ ]) "# Active: ${lib.concatStringsSep ", " active}"
-            ++ lib.optionals (external != [ ] || innerImports != [ ]) (
-              [
-                "#"
-                "# Unresolved (include via imports):"
-              ]
-              ++ map (e: "#   - ${e.src or "«unknown»"}") external
-              ++ map (e: "#   - ${fmtExtSrc e}") innerImports
-            )
-          );
-
-          body = prettyNix "" mergedClean;
-        in
-        header + "\n\n{ lib, ... }:\n" + body + "\n";
-
-      showApps = lib.mapAttrs mkShowDoc config.hosts;
-
       apps = lib.genAttrs config.systems (
         system:
         (perSystemResults.${system}.apps or { })
         // {
           check = mkApp nixpkgs system "check" "cat <<'__NIXY_CHECK_EOF__'\n${checkDoc}\n__NIXY_CHECK_EOF__";
-        }
-        // lib.optionalAttrs (config.hosts != { }) {
-          show = lib.mapAttrs (
-            hostName: doc:
-            mkApp nixpkgs system "show-${hostName}" "cat <<'__NIXY_SHOW_EOF__'\n${doc}\n__NIXY_SHOW_EOF__"
-          ) showApps;
         }
       );
     in
