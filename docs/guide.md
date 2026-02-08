@@ -22,12 +22,12 @@ All helpers wrap their type in `nullOr`, so every option accepts `null`. See [He
 
 ## Traits
 
-A trait is a named behavior unit. The module uses the **two-function form**: the outer function receives framework arguments, the inner function is a standard NixOS/Darwin/HM module.
+A trait is a named behavior unit. The module is a standard NixOS/Darwin/HM module.
 
 ```nix
 traits = [{
   name = "ssh";
-  module = { conf, ... }: { config, pkgs, ... }: {
+  module = { conf, config, pkgs, ... }: {
     services.openssh = {
       enable = true;
       ports = [ conf.ssh.port ];
@@ -37,25 +37,6 @@ traits = [{
   };
 }];
 ```
-
-The two functions keep framework concerns and NixOS concerns separate. The outer function runs at framework time; the inner function runs during NixOS evaluation.
-
-### Framework arguments
-
-The outer function receives:
-
-| Argument | Description |
-|----------|-------------|
-| `conf` | Current node's resolved schema values |
-| `name` | Current node name |
-| `nodes` | All nodes (`{ meta, schema, traits }` each) |
-| _..._ | Everything from `args` (e.g. `inputs`) |
-
-The inner function receives standard NixOS/Darwin/HM arguments (`config`, `pkgs`, `lib`, etc).
-
-### Trait names
-
-Names must be unique across the entire configuration. Duplicate names abort evaluation with an error. Multiple files can each contribute their own `traits` list — the lists are concatenated.
 
 ## Nodes
 
@@ -88,39 +69,13 @@ Each node represents a machine. It has four fields:
 
 Includes support three forms:
 
-**Plain NixOS modules** — paths, attrsets, or functions with NixOS args are passed through unchanged:
+**Plain NixOS modules** — paths, attrsets, or functions with NixOS args are passed:
 
 ```nix
 includes = [
   ./hardware-configuration.nix
   { services.fail2ban.enable = true; }
 ];
-```
-
-**Two-function form** — if an include needs framework args (`conf`, `nodes`, etc.), use the same two-function pattern as traits:
-
-```nix
-includes = [
-  ./resource.nix   # contains: { conf, ... }: { pkgs, ... }: { ... }
-];
-```
-
-Nixy auto-detects the form: if the function's formal parameters include NixOS-specific names (`config`, `pkgs`, `options`, `lib`, `modulesPath`), it's treated as a plain NixOS module. Otherwise, it's treated as a two-function form and called with framework args.
-
-## Rules
-
-Build-time assertions that are checked before nodes are returned.
-
-```nix
-{ config, ... }:
-{
-  rules = [
-    {
-      assertion = config.nodes ? server;
-      message = "a 'server' node is required";
-    }
-  ];
-}
 ```
 
 ## Multi-platform
@@ -169,7 +124,7 @@ Traits can read other nodes' data via the `nodes` argument:
 ```nix
 traits = [{
   name = "client";
-  module = { conf, nodes, ... }: { ... }: {
+  module = { conf, nodes, ... }: {
     services.myApp.serverHost = nodes.server.schema.net.ip;
   };
 }];

@@ -32,7 +32,7 @@ Define schema and traits:
 
   traits = [{
     name = "ssh";
-    module = { conf, ... }: { config, ... }: {
+    module = { conf, ... }: {
       services.openssh.enable = true;
       services.openssh.ports = [ conf.ssh.port ];
     };

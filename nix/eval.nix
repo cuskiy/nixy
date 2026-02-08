@@ -87,6 +87,7 @@ let
     else
       throw "[nixy/scan] invalid import: ${builtins.typeOf x}";
 
+  # Load a file for the nixy-level evalModules (schema/traits/nodes defs).
   loadFile =
     x:
     if builtins.isPath x then
@@ -129,9 +130,7 @@ let
   traitType = lib.types.submodule {
     options = {
       name = lib.mkOption { type = lib.types.str; };
-      module = lib.mkOption {
-        type = lib.types.either (lib.types.functionTo lib.types.raw) lib.types.attrs;
-      };
+      module = lib.mkOption { type = lib.types.raw; };
     };
   };
 
@@ -147,48 +146,17 @@ let
       "[nixy/traits] duplicate names: ${lib.concatStringsSep ", " (builtins.attrNames dups)}"
       (lib.listToAttrs (map (t: lib.nameValuePair t.name t) traits));
 
-  # -- module form detection -------------------------------------------
+  # -- module loading --------------------------------------------------
+  # Import a value into a NixOS-ready module and tag it for error traces.
+  # No detection, no calling — all argument resolution is handled by
+  # NixOS via _module.args, the same mechanism that provides pkgs.
 
-  # True when fn's formal parameters contain a canonical NixOS module
-  # argument, meaning it is a plain NixOS module — not a nixy outer.
-  nixosArgs = [
-    "config"
-    "options"
-    "pkgs"
-    "lib"
-    "modulesPath"
-  ];
-
-  isNixosModuleFn =
-    fn:
-    let
-      fargs = builtins.functionArgs fn;
-    in
-    builtins.any (a: fargs ? ${a}) nixosArgs;
-
-  # -- module resolution -----------------------------------------------
-
-  # Normalise any module value into a NixOS-ready module.
-  #
-  # Three input forms:
-  #   1. { framework }: { nixos }: { ... }   — call outer with frameworkArgs
-  #   2. { nixos }: { ... }                  — pass through
-  #   3. { ... }  (attrset)                  — pass through
-  #
-  # Paths are imported first, then the same logic applies.
-  resolveModule =
-    fwArgs: tag: m:
+  loadModule =
+    tag: m:
     if builtins.isPath m then
-      let
-        loc = toString m;
-        imported = import m;
-      in
-      if builtins.isFunction imported then
-        lib.setDefaultModuleLocation loc (if isNixosModuleFn imported then imported else imported fwArgs)
-      else
-        lib.setDefaultModuleLocation loc imported
+      lib.setDefaultModuleLocation (toString m) (import m)
     else if builtins.isFunction m then
-      lib.setDefaultModuleLocation tag (if isNixosModuleFn m then m else m fwArgs)
+      lib.setDefaultModuleLocation tag m
     else if builtins.isAttrs m then
       { _file = tag; } // m
     else
@@ -207,30 +175,25 @@ let
     let
       missing = builtins.filter (t: !(traitIndex ? ${t})) node.traits;
 
-      # Force-evaluate schema values early so type errors surface here
-      # (with nixy's addErrorContext) instead of deep inside NixOS eval.
       conf = lib.deepSeq node.schema node.schema;
 
-      # Core framework values on the right — they must not be shadowed
-      # by anything the user passes in args.
+      # Core args on the right — cannot be shadowed by userArgs.
       frameworkArgs = userArgs // {
         inherit name conf;
         nodes = lib.mapAttrs (_: n: { inherit (n) meta schema traits; }) allNodes;
       };
 
-      resolve = resolveModule frameworkArgs;
-
       traitModules = map (
         tName:
         builtins.addErrorContext "while evaluating trait '${tName}' for node '${name}'" (
-          resolve "nixy: trait '${tName}', node '${name}'" traitIndex.${tName}.module
+          loadModule "nixy: trait '${tName}', node '${name}'" traitIndex.${tName}.module
         )
       ) node.traits;
 
       includeModules = lib.imap0 (
         idx: m:
         builtins.addErrorContext "while evaluating include[${toString idx}] for node '${name}'" (
-          resolve "nixy: include[${toString idx}], node '${name}'" m
+          loadModule "nixy: include[${toString idx}], node '${name}'" m
         )
       ) node.includes;
     in
@@ -238,6 +201,7 @@ let
       "[nixy/node '${name}'] unknown traits: ${lib.concatStringsSep ", " missing}"
       {
         module = {
+          config._module.args = frameworkArgs;
           imports = traitModules ++ includeModules;
         };
         meta = node.meta;
@@ -299,23 +263,17 @@ let
           default = { };
         };
         _result = lib.mkOption {
-          type = lib.types.raw;
+          type = deepMerge;
           internal = true;
         };
       };
 
-      config._result = {
-        nodes = builtNodes;
-        _nixy = {
-          traitNames = map (t: t.name) config.traits;
-          nodeNames = builtins.attrNames config.nodes;
-        };
-      };
+      config._result.nodes = builtNodes;
     };
 
 in
 {
-  meta.version = "0.8.0";
+  meta.version = "0.9.0";
   inherit helpers;
 
   eval =

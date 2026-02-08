@@ -47,7 +47,6 @@ These options are available in every loaded `.nix` file:
 | `schema` | deep-merged attrset | Option declarations (the knobs) |
 | `traits` | list of `{ name, module }` | Behavior units |
 | `nodes` | attrsOf submodule | Machine definitions |
-| `rules` | list of `{ assertion, message }` | Build-time assertions |
 
 ## Node Fields
 
@@ -67,31 +66,12 @@ Traits use the two-function form. The outer function takes framework args, the i
 ```nix
 {
   name = "ssh";
-  module = { conf, name, nodes, ... }:    # framework args
-    { config, pkgs, lib, ... }:           # NixOS module args
+  module =
+    { conf, config, pkgs, lib, ... }:           # NixOS and framework module args
     {
       # NixOS configuration
     };
 }
-```
-
-## Includes
-
-Includes are auto-detected:
-
-- Functions with NixOS-specific args (`config`, `pkgs`, `options`, `lib`, `modulesPath`) → plain NixOS module
-- Functions without those args → two-function form, called with framework args
-- Paths → imported, then classified by the above rules
-- Attrsets → passed through
-
-## Rules
-
-Assertions checked at build time. If any fails, evaluation aborts.
-
-```nix
-rules = [
-  { assertion = config.nodes ? server; message = "server node required"; }
-];
 ```
 
 ## Scanning Defaults
