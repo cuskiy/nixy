@@ -299,7 +299,7 @@ let
         };
         traits = lib.mkOption {
           type = lib.types.listOf traitType;
-          default = [ };
+          default = [ ];
         };
         nodes = lib.mkOption {
           type = lib.types.attrsOf nodeType;
