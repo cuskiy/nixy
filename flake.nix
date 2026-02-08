@@ -1,32 +1,18 @@
 {
-  description = "Nixy — Lightweight NixOS/Darwin/Home Manager framework";
+  description = "Schema-driven configuration framework for NixOS, Darwin, and Home Manager";
 
   outputs =
-    { self }:
+    { self, ... }:
+    let
+      nixy = import ./nix/eval.nix;
+    in
     {
-      templates = {
-        minimal = {
-          description = "Minimal NixOS configuration";
-          path = ./templates/minimal;
-        };
-        complex = {
-          description = "Multi-platform with disko and deploy-rs";
-          path = ./templates/complex;
-        };
-      };
+      # Usage: nixy.eval nixpkgs.lib { imports = [ ./. ]; args = { ... }; }
+      eval = lib: (nixy { inherit lib; }).eval;
 
-      eval =
-        {
-          nixpkgs,
-          imports ? [ ],
-          args ? { },
-          exclude ? null,
-        }:
-        let
-          nixy = import ./nix/eval.nix { inherit (nixpkgs) lib; };
-        in
-        nixy.eval {
-          inherit nixpkgs imports args exclude;
-        };
+      templates.minimal = {
+        description = "Single NixOS machine";
+        path = ./templates/minimal;
+      };
     };
 }

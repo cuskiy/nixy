@@ -79,7 +79,7 @@ let
       if builtins.substring 0 1 x == "/" then
         resolveImport exclude (/. + x)
       else
-        throw "[nixy/scan] relative string path '${x}' not supported; use a path literal instead"
+        throw "[nixy/scan] relative string path '${x}' not supported; use a path literal"
     else if builtins.isAttrs x then
       [ x ]
     else if builtins.isList x then
@@ -96,43 +96,11 @@ let
     else
       x;
 
-  # -- validation ------------------------------------------------------
-
-  validName = s: builtins.match "[a-zA-Z_][a-zA-Z0-9_-]*" s != null;
-
-  reservedAny = [
-    "enable"
-    "load"
-  ];
-
-  reservedFirst = [
-    "system"
-    "target"
-    "extraModules"
-    "instantiate"
-  ];
-
-  checkPath =
-    tag: segs:
-    let
-      path = lib.concatStringsSep "." segs;
-      top = builtins.head segs;
-      badAny = lib.findFirst (s: builtins.elem s reservedAny) null segs;
-      badName = lib.findFirst (s: !(validName s)) null segs;
-    in
-    lib.throwIf (badAny != null) "[nixy/${tag}] '${path}': '${badAny}' is reserved"
-      (
-        lib.throwIf (badName != null) "[nixy/${tag}] '${path}': invalid segment '${badName}'"
-          (
-            lib.throwIf (builtins.elem top reservedFirst)
-              "[nixy/${tag}] '${path}': '${top}' is a host built-in"
-              segs
-          )
-      );
-
   # -- schema ----------------------------------------------------------
 
   isOption = x: builtins.isAttrs x && (x._type or null) == "option";
+
+  validName = s: builtins.match "[a-zA-Z_][a-zA-Z0-9_-]*" s != null;
 
   flattenSchema =
     prefix: attrs:
@@ -144,14 +112,11 @@ let
         in
         if isOption value then
           let
-            _ = checkPath "schema" (lib.splitString "." path);
+            segs = lib.splitString "." path;
+            bad = lib.findFirst (s: !(validName s)) null segs;
           in
-          [
-            {
-              inherit path;
-              option = value;
-            }
-          ]
+          lib.throwIf (bad != null) "[nixy/schema] '${path}': invalid segment '${bad}'"
+            [{ inherit path; option = value; }]
         else if builtins.isAttrs value then
           flattenSchema path value
         else
@@ -159,95 +124,25 @@ let
       ) attrs
     );
 
-  # -- module tree type ------------------------------------------------
-
-  moduleLeaf = lib.mkOptionType {
-    name = "deferredModules";
-    check = builtins.isList;
-    merge =
-      loc: defs:
+  buildSchemaOpts =
+    prefix: attrs:
+    lib.mapAttrs (
+      name: value:
       let
-        badDefs = builtins.filter (d: !(builtins.isList d.value)) defs;
+        path = if prefix == "" then name else "${prefix}.${name}";
       in
-      lib.throwIf (badDefs != [ ])
-        "[nixy/modules] '${lib.showOption loc}': expected a list (use load = [ ... ])"
-        (
-          lib.concatMap (
-            d:
-            map (
-              entry:
-              if builtins.isFunction entry || builtins.isAttrs entry then
-                lib.setDefaultModuleLocation "${d.file}, via ${lib.showOption loc}" entry
-              else
-                entry
-            ) d.value
-          ) defs
-        );
-  };
+      if isOption value then
+        value
+      else if builtins.isAttrs value then
+        lib.mkOption {
+          type = lib.types.submodule { options = buildSchemaOpts path value; };
+          default = { };
+        }
+      else
+        throw "[nixy/schema] '${path}': expected option or attrset"
+    ) attrs;
 
-  moduleTree =
-    let
-      inner = lib.mkOptionType {
-        name = "moduleTree";
-        check = builtins.isAttrs;
-        merge =
-          loc: defs:
-          let
-            bad = builtins.filter (d: !(builtins.isAttrs d.value)) defs;
-            hint =
-              if builtins.any (d: builtins.isFunction d.value) bad then
-                " (did you mean '${lib.concatStringsSep "." loc}.load = [ ... ]'?)"
-              else
-                "";
-          in
-          lib.throwIf (bad != [ ])
-            "[nixy/modules] '${lib.concatStringsSep "." loc}': expected attrset${hint}"
-            (
-              let
-                allKeys = lib.unique (lib.concatMap (d: builtins.attrNames d.value) defs);
-              in
-              lib.genAttrs allKeys (
-                key:
-                let
-                  subs = lib.concatMap (
-                    d: lib.optional (d.value ? ${key}) { inherit (d) file; value = d.value.${key}; }
-                  ) defs;
-                in
-                if key == "load" then moduleLeaf.merge (loc ++ [ key ]) subs else inner.merge (loc ++ [ key ]) subs
-              )
-            );
-      };
-    in
-    lib.mkOptionType {
-      name = "moduleTree";
-      check = builtins.isAttrs;
-      merge = inner.merge;
-    };
-
-  collectIds =
-    prefix: tree:
-    lib.concatLists (
-      lib.mapAttrsToList (
-        name: value:
-        let
-          path = if prefix == "" then name else "${prefix}.${name}";
-        in
-        if name == "load" then
-          if prefix == "" then
-            throw "[nixy/modules] 'load' cannot be a top-level key"
-          else
-            let
-              _ = checkPath "modules" (lib.splitString "." prefix);
-            in
-            [ prefix ]
-        else if builtins.isAttrs value then
-          collectIds path value
-        else
-          throw "[nixy/modules] '${path}': unexpected ${builtins.typeOf value}"
-      ) tree
-    );
-
-  # -- deep merge (for schema) -----------------------------------------
+  # -- types -----------------------------------------------------------
 
   deepMerge = lib.mkOptionType {
     name = "deepMerge";
@@ -255,414 +150,229 @@ let
     merge = _: defs: lib.foldl' lib.recursiveUpdate { } (map (d: d.value) defs);
   };
 
-  # -- merged function (for perSystem) ---------------------------------
-
-  mergedFn = lib.mkOptionType {
-    name = "mergedFunction";
-    check = builtins.isFunction;
-    merge =
-      _: defs: args:
-      lib.foldl' lib.recursiveUpdate { } (map (d: d.value args) defs);
-  };
-
-  # -- host type tree --------------------------------------------------
-
-  emptyNode = {
-    opts = { };
-    sub = { };
-  };
-
-  insertAt =
-    node: segs: f:
-    let
-      h = builtins.head segs;
-      t = builtins.tail segs;
-    in
-    if t == [ ] then
-      f node h
-    else
-      let
-        child = node.sub.${h} or emptyNode;
-      in
-      node // { sub = node.sub // { ${h} = insertAt child t f; }; };
-
-  insertOpt = node: segs: opt: insertAt node segs (n: h: n // { opts = n.opts // { ${h} = opt; }; });
-
-  insertEnable =
-    node: segs: id:
-    insertAt node segs (
-      n: h:
-      let
-        child = n.sub.${h} or emptyNode;
-      in
-      n
-      // {
-        sub = n.sub // {
-          ${h} = child // {
-            opts = child.opts // {
-              enable = lib.mkEnableOption id;
-            };
-          };
-        };
-      }
-    );
-
-  joinPath = prefix: n: if prefix == "" then n else "${prefix}.${n}";
-
-  buildOpts =
-    prefix: node:
-    let
-      clash = builtins.attrNames (builtins.intersectAttrs node.opts node.sub);
-    in
-    lib.throwIf (clash != [ ])
-      "[nixy] cannot be both option and namespace: ${lib.concatMapStringsSep ", " (c: "'${joinPath prefix c}'") clash}"
-      (
-        node.opts
-        // lib.mapAttrs (
-          n: child:
-          lib.mkOption {
-            type = lib.types.submodule { options = buildOpts (joinPath prefix n) child; };
-            default = { };
-          }
-        ) node.sub
-      );
-
-  builtinHostOpts = {
-    system = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-    };
-    target = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-    };
-    extraModules = lib.mkOption {
-      type = lib.types.listOf lib.types.deferredModule;
-      default = [ ];
-    };
-    instantiate = lib.mkOption {
-      type = lib.types.nullOr lib.types.raw;
-      default = null;
+  traitType = lib.types.submodule {
+    options = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        description = "Unique identifier for this trait.";
+      };
+      module = lib.mkOption {
+        type = lib.types.raw;
+        description = "NixOS/Darwin/HM module (function or attrset).";
+      };
     };
   };
 
-  mkHostType =
-    schemaEntries: moduleIds:
+  ruleType = lib.types.submodule {
+    options = {
+      assertion = lib.mkOption { type = lib.types.bool; };
+      message = lib.mkOption { type = lib.types.str; };
+    };
+  };
+
+  # -- trait index -----------------------------------------------------
+
+  buildTraitIndex =
+    traits:
     let
-      t0 = lib.foldl' (acc: e: insertOpt acc (lib.splitString "." e.path) e.option) emptyNode
-        schemaEntries;
-      t1 = lib.foldl' (acc: id: insertEnable acc (lib.splitString "." id) id) t0 moduleIds;
+      grouped = lib.groupBy (t: t.name) traits;
+      dups = lib.filterAttrs (_: v: builtins.length v > 1) grouped;
     in
-    lib.types.submodule { options = builtinHostOpts // buildOpts "" t1; };
+    lib.throwIf (dups != { })
+      "[nixy/traits] duplicate names: ${lib.concatStringsSep ", " (builtins.attrNames dups)}"
+      (lib.listToAttrs (map (t: lib.nameValuePair t.name t) traits));
 
-  # -- host build ------------------------------------------------------
+  # -- node building ---------------------------------------------------
 
-  resolveTarget =
-    host:
-    if host.target != null then
-      host.target
-    else if host.system != null && lib.hasSuffix "-darwin" host.system then
-      "darwin"
-    else
-      "nixos";
-
-  cleanHost =
-    host:
-    removeAttrs host [
-      "extraModules"
-      "instantiate"
-    ]
-    // { target = resolveTarget host; };
-
-  isEnabled =
-    host: id: (lib.getAttrFromPath (lib.splitString "." id ++ [ "enable" ]) host) == true;
-
-  buildHost =
+  buildNode =
     {
       name,
-      host,
-      moduleIds,
-      allHosts,
-      rawModules,
-      targets,
-      args,
+      node,
+      traitIndex,
+      allNodes,
+      userArgs,
     }:
     let
-      target = resolveTarget host;
-      active = builtins.filter (isEnabled host) moduleIds;
-      payload = lib.concatMap (
-        id: (lib.getAttrFromPath (lib.splitString "." id) rawModules).load
-      ) active;
-      inst =
-        if host.instantiate != null then
-          host.instantiate
-        else
-          let
-            td = targets.${target} or null;
-          in
-          if td != null then
-            td.instantiate
-          else
-            throw "[nixy/hosts] '${name}': unknown target '${target}'";
-    in
-    inst {
-      system = host.system;
-      specialArgs = {
-        inherit name target;
-        system = host.system;
-        host = cleanHost host;
-        hosts = lib.mapAttrs (_: cleanHost) allHosts;
-      } // args;
-      modules = payload ++ host.extraModules;
-    };
+      missing = builtins.filter (t: !(traitIndex ? ${t})) node.traits;
 
-  # -- check ------------------------------------------------------------
+      frameworkArgs =
+        {
+          inherit name;
+          conf = node.schema;
+          nodes = lib.mapAttrs (_: n: { inherit (n) meta schema traits; }) allNodes;
+        }
+        // userArgs;
 
-  fmtCheckDoc =
-    {
-      schemaEntries,
-      moduleIds,
-      hostNames,
-    }:
-    let
-      fmtField =
-        e:
+      # Resolve a trait's module into a NixOS-ready module.
+      #
+      # Two forms are supported:
+      #
+      #   1) Two-function (recommended):
+      #        module = { conf, nodes, ... }: { config, pkgs, ... }: { ... };
+      #      The outer function takes framework args, returns a NixOS module.
+      #
+      #   2) Flat:
+      #        module = { conf, config, pkgs, ... }: { ... };
+      #      A single function that mixes framework and NixOS args.
+      #
+      # Detection: if the function's formal parameters include any NixOS-
+      # specific names (config, pkgs, options, modulesPath), it's flat.
+      # Otherwise it's a two-function form whose outer layer takes only
+      # framework args.
+      #
+      # For the flat form, we wrap it in a NixOS module function that has
+      # a proper set pattern.  NixOS introspects the wrapper (seeing only
+      # standard NixOS arg names) and resolves them normally.  Framework
+      # args are captured in the closure and merged via // inside the
+      # function body, where both sides are already concrete values.
+      resolveTraitModule =
+        tName:
         let
-          type = e.option.type.description or e.option.type.name or "?";
-          def =
-            if !(e.option ? default) then
-              "-"
-            else if e.option.default == null then
-              "`null`"
-            else
-              "`${builtins.toJSON e.option.default}`";
+          m = traitIndex.${tName}.module;
+          loc = "nixy: trait '${tName}', node '${name}'";
         in
-        "| `${e.path}` | ${type} | ${def} |";
-      n = builtins.length;
-    in
-    lib.concatStringsSep "\n" (
-      [
-        "# Schema"
-        "> ${toString (n schemaEntries)} fields"
-      ]
-      ++ lib.optionals (schemaEntries != [ ]) [
-        "| Field | Type | Default |"
-        "|-------|---------|------|"
-        (lib.concatMapStringsSep "\n" fmtField schemaEntries)
-      ]
-      ++ [
-        ""
-        "# Modules"
-        "> ${toString (n moduleIds)}${lib.optionalString (moduleIds != [ ]) ": ${lib.concatStringsSep ", " moduleIds}"}"
-        ""
-        "# Hosts"
-        "> ${toString (n hostNames)}${lib.optionalString (hostNames != [ ]) ": ${lib.concatStringsSep ", " hostNames}"}"
-      ]
-    );
+        builtins.addErrorContext "while evaluating trait '${tName}' for node '${name}'" (
+          if !builtins.isFunction m then
+            # Attrset module — pass through with location tag
+            lib.setDefaultModuleLocation loc m
+          else
+            let
+              fargs = builtins.functionArgs m;
+              isFlat =
+                fargs ? config
+                || fargs ? pkgs
+                || fargs ? options
+                || fargs ? modulesPath;
+            in
+            if isFlat then
+              # Flat form → wrap with standard NixOS set pattern.
+              # NixOS sees only standard arg names when it introspects
+              # this function, so argument resolution works normally.
+              # Framework args (conf, name, nodes, etc.) come from the
+              # closure, merged in after NixOS has provided its args.
+              lib.setDefaultModuleLocation loc (
+                { config, options, lib, pkgs, ... }@nixosArgs:
+                m (nixosArgs // frameworkArgs)
+              )
+            else
+              # Two-function form → call outer with framework args.
+              # The result is a standard NixOS module.
+              lib.setDefaultModuleLocation loc (m frameworkArgs)
+        );
 
-  mkApp =
-    nixpkgs: system: name: script:
-    {
-      type = "app";
-      program = toString (
-        nixpkgs.legacyPackages.${system}.writeShellScript "nixy-${name}" script
-      );
-    };
+      traitModules = map resolveTraitModule node.traits;
+    in
+    lib.throwIf (missing != [ ])
+      "[nixy/node '${name}'] unknown traits: ${lib.concatStringsSep ", " missing}"
+      {
+        module = { imports = traitModules ++ node.includes; };
+        meta = node.meta;
+      };
 
   # -- core module -----------------------------------------------------
 
-  defaultSystems = [
-    "x86_64-linux"
-    "aarch64-linux"
-    "aarch64-darwin"
-    "x86_64-darwin"
-  ];
-
   mkCore =
-    { nixpkgs, args }:
+    { userArgs }:
     { config, ... }:
     let
       schemaEntries = flattenSchema "" config.schema;
-      moduleIds = collectIds "" config.modules;
-      hostType = mkHostType schemaEntries moduleIds;
+      traitIndex = buildTraitIndex config.traits;
+      traitNames = map (t: t.name) config.traits;
+      schemaOpts = buildSchemaOpts "" config.schema;
 
-      builtHosts = lib.mapAttrs (
-        name: host:
-        builtins.addErrorContext
-          "while building host '${name}' (${host.system}, ${resolveTarget host})"
-          (buildHost {
-            inherit name host moduleIds args;
-            allHosts = config.hosts;
-            rawModules = config.modules;
-            targets = config.targets;
-          })
-      ) config.hosts;
+      nodeType = lib.types.submodule {
+        options = {
+          meta = lib.mkOption {
+            type = deepMerge;
+            default = { };
+          };
+          traits = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+          };
+          schema = lib.mkOption {
+            type = lib.types.submodule { options = schemaOpts; };
+            default = { };
+          };
+          includes = lib.mkOption {
+            type = lib.types.listOf lib.types.deferredModule;
+            default = [ ];
+          };
+        };
+      };
 
-      hostsByTarget = lib.groupBy (n: resolveTarget config.hosts.${n}) (
-        builtins.attrNames config.hosts
-      );
-
-      targetOutputs = lib.mapAttrs' (
-        tgt: def:
-        lib.nameValuePair def.output (lib.genAttrs (hostsByTarget.${tgt} or [ ]) (n: builtHosts.${n}))
-      ) config.targets;
+      builtNodes = lib.mapAttrs (
+        nodeName: node:
+        builtins.addErrorContext "while building node '${nodeName}'" (buildNode {
+          name = nodeName;
+          inherit node traitIndex userArgs;
+          allNodes = config.nodes;
+        })
+      ) config.nodes;
 
       rulesErrs = map (r: r.message) (builtins.filter (r: !r.assertion) config.rules);
+
       checked =
         lib.throwIf (rulesErrs != [ ])
           ("[nixy/rules]\n" + lib.concatMapStringsSep "\n" (e: "  - ${e}") rulesErrs)
-          targetOutputs;
-
-      perSystemResults = lib.genAttrs config.systems (
-        system:
-        config.perSystem (
-          {
-            inherit system lib;
-            pkgs = nixpkgs.legacyPackages.${system};
-            hosts = lib.mapAttrs (_: cleanHost) config.hosts;
-          }
-          // args
-        )
-      );
-
-      mkPerSystemOutput =
-        key:
-        lib.filterAttrs (_: v: v != { }) (
-          lib.genAttrs config.systems (s: perSystemResults.${s}.${key} or { })
-        );
-
-      formatter = lib.genAttrs config.systems (
-        system:
-        let
-          ps = perSystemResults.${system};
-        in
-        if ps ? formatter then ps.formatter else nixpkgs.legacyPackages.${system}.nixfmt-rfc-style
-      );
-
-      checkDoc = fmtCheckDoc {
-        inherit schemaEntries moduleIds;
-        hostNames = builtins.attrNames config.hosts;
-      };
-
-      apps = lib.genAttrs config.systems (
-        system:
-        (perSystemResults.${system}.apps or { })
-        // {
-          check = mkApp nixpkgs system "check" "cat <<'__NIXY_CHECK_EOF__'\n${checkDoc}\n__NIXY_CHECK_EOF__";
-        }
-      );
+          builtNodes;
     in
     {
       _file = "<nixy/core>";
 
       options = {
-        systems = lib.mkOption {
-          type = lib.types.listOf lib.types.str;
-          default = defaultSystems;
-          description = "Systems for perSystem outputs.";
-        };
-        perSystem = lib.mkOption {
-          type = mergedFn;
-          default = _: { };
-          description = "Per-system outputs. Multiple definitions are deep-merged.";
-        };
         schema = lib.mkOption {
           type = deepMerge;
           default = { };
         };
-        modules = lib.mkOption {
-          type = moduleTree;
-          default = { };
+        traits = lib.mkOption {
+          type = lib.types.listOf traitType;
+          default = [ ];
         };
-        hosts = lib.mkOption {
-          type = lib.types.attrsOf hostType;
-          default = { };
-        };
-        targets = lib.mkOption {
-          type = lib.types.attrsOf (
-            lib.types.submodule {
-              options = {
-                instantiate = lib.mkOption { type = lib.types.raw; };
-                output = lib.mkOption { type = lib.types.str; };
-              };
-            }
-          );
+        nodes = lib.mkOption {
+          type = lib.types.attrsOf nodeType;
           default = { };
         };
         rules = lib.mkOption {
-          type = lib.types.listOf (
-            lib.types.submodule {
-              options = {
-                assertion = lib.mkOption { type = lib.types.bool; };
-                message = lib.mkOption { type = lib.types.str; };
-              };
-            }
-          );
+          type = lib.types.listOf ruleType;
           default = [ ];
         };
-        flake = lib.mkOption {
-          type = lib.types.submoduleWith {
-            modules = [ { freeformType = lib.types.lazyAttrsOf lib.types.raw; } ];
-          };
-          default = { };
+        _result = lib.mkOption {
+          type = lib.types.raw;
+          internal = true;
         };
       };
 
-      config = {
-        targets.nixos = {
-          instantiate =
-            {
-              modules,
-              specialArgs,
-              system ? null,
-            }:
-            lib.nixosSystem (
-              { inherit modules specialArgs; } // lib.optionalAttrs (system != null) { inherit system; }
-            );
-          output = "nixosConfigurations";
+      config._result = {
+        nodes = checked;
+        _nixy = {
+          inherit schemaEntries traitNames;
+          nodeNames = builtins.attrNames config.nodes;
+          nodes = lib.mapAttrs (_: n: { inherit (n) meta traits schema; }) config.nodes;
         };
-
-        flake = lib.mapAttrs (_: lib.mkDefault) (
-          checked
-          // {
-            inherit formatter apps;
-          }
-          // lib.genAttrs [
-            "packages"
-            "devShells"
-            "checks"
-            "legacyPackages"
-          ] mkPerSystemOutput
-        );
       };
     };
+
 in
 {
-  meta.version = "0.5.0";
+  meta.version = "0.6.0";
   inherit helpers;
 
   eval =
     {
-      nixpkgs,
-      imports,
-      args,
-      exclude,
+      imports ? [ ],
+      args ? { },
+      exclude ? null,
     }:
     let
       excludeFn = if exclude != null then exclude else defaultExclude;
       resolved = lib.concatMap (resolveImport excludeFn) (lib.toList imports);
-      core = mkCore { inherit nixpkgs args; };
+      core = mkCore { userArgs = args; };
       evaluated = lib.evalModules {
         class = "nixy";
         modules = map loadFile resolved ++ [ core ];
-        specialArgs =
-          {
-            inherit lib nixpkgs;
-            pkgsFor = system: nixpkgs.legacyPackages.${system};
-          }
-          // helpers
-          // args;
+        specialArgs = { inherit lib; } // helpers // args;
       };
     in
-    lib.filterAttrs (_: v: v != { }) evaluated.config.flake;
+    evaluated.config._result;
 }
