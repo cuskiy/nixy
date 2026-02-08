@@ -137,6 +137,23 @@ let
         throw "[nixy/schema] '${path}': expected option or attrset"
     ) attrs;
 
+  # -- schema introspection --------------------------------------------
+  describeType = opt:
+    let
+      d = opt.type.description or opt.type.name or "?";
+    in
+    if builtins.isString d then d else toString d;
+
+  describeDefault = opt:
+    let
+      r = builtins.tryEval (
+        if !(opt ? default) then "—"
+        else if opt.default == null then "null"
+        else lib.generators.toPretty { } opt.default
+      );
+    in
+    if r.success then r.value else "…";
+
   # -- types -----------------------------------------------------------
   deepMerge = lib.mkOptionType {
     name = "deepMerge";
@@ -175,17 +192,17 @@ let
       "[nixy/traits] duplicate names: ${lib.concatStringsSep ", " (builtins.attrNames dups)}"
       (lib.listToAttrs (map (t: lib.nameValuePair t.name t) traits));
 
-  # -- module resolution -----------------------------------------------
-
-  # Detect whether a function is a plain NixOS/Darwin/HM module by
-  # checking if its formal parameters include NixOS-specific names.
-  isNixosModuleFn = fn:
-    let fargs = builtins.functionArgs fn;
-    in fargs ? config
-      || fargs ? pkgs
-      || fargs ? options
-      || fargs ? lib
-      || fargs ? modulesPath;
+  # -- module form detection -------------------------------------------
+  # A function is a "plain NixOS module" if its formal parameters include
+  # any of the canonical NixOS-specific argument names.  Otherwise it is
+  # treated as the outer layer of the two-function form and will be called
+  # with frameworkArgs.
+  isNixosModuleFn =
+    fn:
+    let
+      fargs = builtins.functionArgs fn;
+    in
+    fargs ? config || fargs ? pkgs || fargs ? options || fargs ? modulesPath;
 
   # -- node building ---------------------------------------------------
   buildNode =
@@ -223,7 +240,7 @@ let
             lib.setDefaultModuleLocation loc (m frameworkArgs)
         );
 
-      # Includes support three forms:
+      # Includes support two forms:
       #
       #   1) Plain NixOS module (path, attrset, or function with NixOS args):
       #        ../hardware-configuration.nix
@@ -231,46 +248,39 @@ let
       #        { config, pkgs, ... }: { ... }
       #      → passed through to NixOS unchanged.
       #
-      #   2) Two-function form (outer has framework args, inner is NixOS module):
+      #   2) Two-function form (outer has framework args):
       #        { conf, ... }: { config, pkgs, ... }: { ... }
       #      → outer called with frameworkArgs, result passed to NixOS.
       #
-      # Detection: import paths first, then check builtins.functionArgs.
-      # If the function has NixOS-specific names (config, pkgs, options,
-      # lib, modulesPath), it's a plain NixOS module.  Otherwise it's a
-      # two-function form whose outer layer takes framework args.
+      # Detection: if the function's formal parameters include any NixOS-
+      # specific names (config, pkgs, options, modulesPath), it's a plain
+      # NixOS module.  Otherwise it's a two-function form.
       resolveIncludeModule =
         idx: m:
         builtins.addErrorContext
           "while evaluating include[${toString idx}] for node '${name}'" (
           if builtins.isPath m then
-            # Path — import and recurse to classify the result.
             let
               loc = toString m;
               imported = import m;
             in
             if !builtins.isFunction imported then
-              # Attrset module from a file
               lib.setDefaultModuleLocation loc imported
             else if isNixosModuleFn imported then
-              # Plain NixOS module — pass through with file location
               lib.setDefaultModuleLocation loc imported
             else
-              # Two-function form — call outer, tag result
               lib.setDefaultModuleLocation loc (imported frameworkArgs)
 
           else if builtins.isFunction m then
-            let loc = "nixy: include[${toString idx}], node '${name}'";
+            let
+              loc = "nixy: include[${toString idx}], node '${name}'";
             in
             if isNixosModuleFn m then
-              # Plain NixOS module function
               lib.setDefaultModuleLocation loc m
             else
-              # Two-function form
               lib.setDefaultModuleLocation loc (m frameworkArgs)
 
           else if builtins.isAttrs m then
-            # Inline attrset module
             { _file = "nixy: include[${toString idx}], node '${name}'"; } // m
 
           else
@@ -311,10 +321,9 @@ let
             type = lib.types.submodule { options = schemaOpts; };
             default = { };
           };
-          # listOf raw: we need the original values (paths, functions,
-          # attrsets) so that buildNode can import paths, detect module
-          # forms, and inject framework args.  deferredModule would wrap
-          # them and make this impossible.
+          # listOf raw — we need the original values (paths, functions,
+          # attrsets) so buildNode can import, detect forms, and inject
+          # framework args.  deferredModule would wrap them opaquely.
           includes = lib.mkOption {
             type = lib.types.listOf lib.types.raw;
             default = [ ];
@@ -337,6 +346,91 @@ let
         lib.throwIf (rulesErrs != [ ])
           ("[nixy/rules]\n" + lib.concatMapStringsSep "\n" (e: "  - ${e}") rulesErrs)
           builtNodes;
+
+      # -- introspection / formatting ------------------------------------
+      nodeNames = builtins.attrNames config.nodes;
+      len = builtins.length;
+
+      fmtCheck =
+        let
+          fmtField =
+            e:
+            "| `${e.path}` | ${describeType e.option} | `${describeDefault e.option}` |";
+        in
+        lib.concatStringsSep "\n" (
+          [
+            "# Schema"
+            "> ${toString (len schemaEntries)} fields"
+          ]
+          ++ lib.optionals (schemaEntries != [ ]) [
+            "| Field | Type | Default |"
+            "|-------|------|---------|"
+            (lib.concatMapStringsSep "\n" fmtField schemaEntries)
+          ]
+          ++ [
+            ""
+            "# Traits"
+            "> ${toString (len traitNames)}${
+              lib.optionalString (traitNames != [ ]) ": ${lib.concatStringsSep ", " traitNames}"
+            }"
+            ""
+            "# Nodes"
+            "> ${toString (len nodeNames)}${
+              lib.optionalString (nodeNames != [ ]) ": ${lib.concatStringsSep ", " nodeNames}"
+            }"
+          ]
+        );
+
+      fmtShow = lib.mapAttrs (
+        nodeName: node:
+        let
+          getVal =
+            path:
+            let
+              r = builtins.tryEval (lib.attrByPath (lib.splitString "." path) null node.schema);
+            in
+            if r.success then r.value else null;
+          fmtVal =
+            v:
+            if v == null then
+              "null"
+            else
+              let
+                r = builtins.tryEval (builtins.toJSON v);
+              in
+              if r.success then r.value else "…";
+          fmtInclude =
+            i:
+            if builtins.isPath i then
+              toString i
+            else if builtins.isAttrs i then
+              "{ … }"
+            else
+              "<function>";
+        in
+        lib.concatStringsSep "\n" (
+          [
+            "# Node: ${nodeName}"
+            ""
+            "system: ${node.meta.system or "unknown"}"
+            "traits: [${lib.concatMapStringsSep " " (t: " \"${t}\"") node.traits} ]"
+          ]
+          ++ [
+            ""
+            "## Schema"
+          ]
+          ++ map (e: "  ${e.path} = ${fmtVal (getVal e.path)}") schemaEntries
+          ++ [ "" "## Includes" ]
+          ++ (
+            if node.includes == [ ] then
+              [ "  (none)" ]
+            else
+              lib.imap0 (
+                i: inc: "  [${toString i}] ${fmtInclude inc}"
+              ) node.includes
+          )
+        )
+      ) config.nodes;
     in
     {
       _file = "<nixy/core>";
@@ -367,16 +461,19 @@ let
       config._result = {
         nodes = checked;
         _nixy = {
-          inherit schemaEntries traitNames;
-          nodeNames = builtins.attrNames config.nodes;
+          inherit schemaEntries traitNames nodeNames;
           nodes = lib.mapAttrs (_: n: { inherit (n) meta traits schema; }) config.nodes;
+          fmt = {
+            check = fmtCheck;
+            show = fmtShow;
+          };
         };
       };
     };
 
 in
 {
-  meta.version = "0.7.2";
+  meta.version = "0.7.3";
   inherit helpers;
 
   eval =
