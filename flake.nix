@@ -2,13 +2,9 @@
   description = "Schema-driven configuration framework for NixOS, Darwin, and Home Manager";
 
   outputs =
-    { self, ... }:
-    let
-      nixy = import ./nix/eval.nix;
-    in
+    { self }:
     {
-      # Usage: nixy.eval lib { imports = [ ./. ]; args = { ... }; }
-      eval = lib: (nixy { inherit lib; }).eval;
+      eval = lib: (import ./nix/eval.nix { inherit lib; }).eval;
 
       templates.minimal = {
         description = "Single NixOS machine";
