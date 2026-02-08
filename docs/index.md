@@ -1,7 +1,6 @@
 ---
 layout: home
 hero:
-  name: Nixy
   text: Schema-driven configuration framework
   tagline: for NixOS, Darwin, and Home Manager
   actions:
