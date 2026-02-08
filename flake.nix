@@ -7,7 +7,7 @@
       nixy = import ./nix/eval.nix;
     in
     {
-      # Usage: nixy.eval nixpkgs.lib { imports = [ ./. ]; args = { ... }; }
+      # Usage: nixy.eval lib { imports = [ ./. ]; args = { ... }; }
       eval = lib: (nixy { inherit lib; }).eval;
 
       templates.minimal = {

@@ -4,14 +4,14 @@
     hostName = mkStr null;
     user = mkStr null;
     timeZone = mkStr "UTC";
-    password = mkStr "changeme";
   };
 
   traits = [
     {
       name = "base";
       module =
-        { conf, ...}: { config, pkgs, ... }:
+        { conf, ... }:
+        { config, pkgs, ... }:
         {
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = true;
@@ -23,7 +23,7 @@
               "wheel"
               "networkmanager"
             ];
-            password = conf.base.password;
+            initialPassword = "changeme";
           };
           system.stateVersion = "26.05";
           nix.settings.experimental-features = [

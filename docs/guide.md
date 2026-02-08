@@ -22,7 +22,7 @@ All helpers wrap their type in `nullOr`, so every option accepts `null`. See [He
 
 ## Traits
 
-A trait is a named behavior unit with a `name` and a `module`.
+A trait is a named behavior unit. The module uses the **two-function form**: the outer function receives framework arguments, the inner function is a standard NixOS/Darwin/HM module.
 
 ```nix
 traits = [{
@@ -38,7 +38,11 @@ traits = [{
 }];
 ```
 
+The two functions keep framework concerns and NixOS concerns separate. The outer function runs at framework time; the inner function runs during NixOS evaluation.
+
 ### Framework arguments
+
+The outer function receives:
 
 | Argument | Description |
 |----------|-------------|
@@ -46,6 +50,8 @@ traits = [{
 | `name` | Current node name |
 | `nodes` | All nodes (`{ meta, schema, traits }` each) |
 | _..._ | Everything from `args` (e.g. `inputs`) |
+
+The inner function receives standard NixOS/Darwin/HM arguments (`config`, `pkgs`, `lib`, etc).
 
 ### Trait names
 
@@ -62,7 +68,7 @@ Each node represents a machine. It has four fields:
     meta.deploy.host = "10.0.0.1";   # arbitrary nesting
     traits = [ "base" "ssh" ];       # which traits to activate
     schema.ssh.port = 2222;          # override schema defaults
-    includes = [                     # extra NixOS modules
+    includes = [                     # extra modules
       { services.fail2ban.enable = true; }
       ./hardware-configuration.nix
     ];
@@ -76,11 +82,34 @@ Each node represents a machine. It has four fields:
 
 **schema** — Type-checked values matching the global schema declarations. Unset values use the declared defaults.
 
-**includes** — Additional NixOS/Darwin/HM modules appended after trait modules.
+**includes** — Additional modules appended after trait modules. See below.
+
+### Includes
+
+Includes support three forms:
+
+**Plain NixOS modules** — paths, attrsets, or functions with NixOS args are passed through unchanged:
+
+```nix
+includes = [
+  ./hardware-configuration.nix
+  { services.fail2ban.enable = true; }
+];
+```
+
+**Two-function form** — if an include needs framework args (`conf`, `nodes`, etc.), use the same two-function pattern as traits:
+
+```nix
+includes = [
+  ./resource.nix   # contains: { conf, ... }: { pkgs, ... }: { ... }
+];
+```
+
+Nixy auto-detects the form: if the function's formal parameters include NixOS-specific names (`config`, `pkgs`, `options`, `lib`, `modulesPath`), it's treated as a plain NixOS module. Otherwise, it's treated as a two-function form and called with framework args.
 
 ## Rules
 
-Build-time assertions that are checked before nodes are returned. If any assertion fails, evaluation aborts with the corresponding message.
+Build-time assertions that are checked before nodes are returned.
 
 ```nix
 { config, ... }:
@@ -148,4 +177,4 @@ traits = [{
 
 ## Error Tracking
 
-Nixy tags each trait module with location information via `setDefaultModuleLocation`. When a NixOS evaluation error occurs inside a trait, the trace includes the trait name and node name, making it easier to identify the source.
+Nixy tags each trait and include module with location information. When an evaluation error occurs, the trace includes the source (trait name or include index) and node name.

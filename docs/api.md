@@ -18,14 +18,14 @@ nixy.eval lib {
 |-----------|-------------|
 | `lib` | Nixpkgs `lib` (e.g. `nixpkgs.lib`) |
 | `imports` | Directories, `.nix` files, attrsets, or lists thereof |
-| `args` | Passed to framework modules (via `specialArgs`) and to trait modules (via closure or outer function call) |
+| `args` | Passed to framework modules (via `specialArgs`) and to trait/include modules (via the outer function) |
 | `exclude` | `{ name, path } -> bool` — return `true` to skip a file during scanning |
 
 **Returns:**
 
 ```nix
 {
-  nodes.<name> = {
+  nodes.<n> = {
     module = { ... };   # NixOS/Darwin/HM module — pass to nixosSystem etc.
     meta = { ... };     # Free-form user data from the node definition
   };
@@ -58,11 +58,11 @@ Each node accepts:
 | `meta` | deep-merged attrset | `{ }` | Free-form user data |
 | `traits` | list of strings | `[ ]` | Trait names to activate |
 | `schema` | submodule | `{ }` | Values matching global schema |
-| `includes` | list of deferred modules | `[ ]` | Extra NixOS/Darwin/HM modules |
+| `includes` | list of raw | `[ ]` | Extra modules (paths, attrsets, or functions) |
 
 ## Trait Structure
 
-**Two-function form**
+Traits use the two-function form. The outer function takes framework args, the inner is a NixOS module:
 
 ```nix
 {
@@ -74,6 +74,15 @@ Each node accepts:
     };
 }
 ```
+
+## Includes
+
+Includes are auto-detected:
+
+- Functions with NixOS-specific args (`config`, `pkgs`, `options`, `lib`, `modulesPath`) → plain NixOS module
+- Functions without those args → two-function form, called with framework args
+- Paths → imported, then classified by the above rules
+- Attrsets → passed through
 
 ## Rules
 
