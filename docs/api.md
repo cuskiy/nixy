@@ -62,9 +62,7 @@ Each node accepts:
 
 ## Trait Structure
 
-Two forms are supported. Nixy auto-detects which one you're using.
-
-**Two-function form** (recommended — separates framework and NixOS concerns):
+**Two-function form**
 
 ```nix
 {
@@ -76,19 +74,6 @@ Two forms are supported. Nixy auto-detects which one you're using.
     };
 }
 ```
-
-**Flat form** (convenient — single function with all args):
-
-```nix
-{
-  name = "ssh";
-  module = { conf, config, pkgs, ... }: {
-    # NixOS configuration
-  };
-}
-```
-
-Nixy detects flat modules by checking `builtins.functionArgs` for NixOS-specific names (`config`, `pkgs`, `options`, `modulesPath`). If found, it wraps the function automatically.
 
 ## Rules
 

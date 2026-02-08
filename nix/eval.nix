@@ -205,26 +205,10 @@ let
 
       # Resolve a trait's module into a NixOS-ready module.
       #
-      # Two forms are supported:
+      # Traits use the two-function form:
+      #   module = { conf, nodes, ... }: { config, pkgs, ... }: { ... };
       #
-      #   1) Two-function (recommended):
-      #        module = { conf, nodes, ... }: { config, pkgs, ... }: { ... };
-      #      The outer function takes framework args, returns a NixOS module.
-      #
-      #   2) Flat:
-      #        module = { conf, config, pkgs, ... }: { ... };
-      #      A single function that mixes framework and NixOS args.
-      #
-      # Detection: if the function's formal parameters include any NixOS-
-      # specific names (config, pkgs, options, modulesPath), it's flat.
-      # Otherwise it's a two-function form whose outer layer takes only
-      # framework args.
-      #
-      # For the flat form, we wrap it in a NixOS module function that has
-      # a proper set pattern.  NixOS introspects the wrapper (seeing only
-      # standard NixOS arg names) and resolves them normally.  Framework
-      # args are captured in the closure and merged via // inside the
-      # function body, where both sides are already concrete values.
+      # The outer function takes framework args and returns a NixOS module.
       resolveTraitModule =
         tName:
         let
@@ -236,36 +220,42 @@ let
             # Attrset module — pass through with location tag
             lib.setDefaultModuleLocation loc m
           else
-            let
-              fargs = builtins.functionArgs m;
-              isFlat =
-                fargs ? config
-                || fargs ? pkgs
-                || fargs ? options
-                || fargs ? modulesPath;
-            in
-            if isFlat then
-              # Flat form → wrap with standard NixOS set pattern.
-              # NixOS sees only standard arg names when it introspects
-              # this function, so argument resolution works normally.
-              # Framework args (conf, name, nodes, etc.) come from the
-              # closure, merged in after NixOS has provided its args.
-              lib.setDefaultModuleLocation loc (
-                { config, options, lib, pkgs, ... }@nixosArgs:
-                m (nixosArgs // frameworkArgs)
-              )
-            else
-              # Two-function form → call outer with framework args.
-              # The result is a standard NixOS module.
-              lib.setDefaultModuleLocation loc (m frameworkArgs)
+            # Two-function form → call outer with framework args.
+            # The result is a standard NixOS module.
+            lib.setDefaultModuleLocation loc (m frameworkArgs)
+        );
+
+      # Resolve an include module to support framework args.
+      #
+      # Includes can be:
+      #   1) Attrset modules: pass through unchanged
+      #   2) Functions with framework args:
+      #        { conf, name, nodes, ... }: { config, pkgs, ... }: { ... }
+      #   3) Direct NixOS modules (for backward compatibility):
+      #        { config, pkgs, ... }: { ... }
+      #
+      # We wrap function-based includes to provide framework args.
+      resolveIncludeModule =
+        idx: m:
+        let
+          loc = "nixy: include[${toString idx}], node '${name}'";
+        in
+        builtins.addErrorContext "while evaluating include[${toString idx}] for node '${name}'" (
+          if !builtins.isFunction m then
+            # Attrset module — pass through with location tag
+            lib.setDefaultModuleLocation loc m
+          else
+            # Function module — call with framework args and let it return a NixOS module
+            lib.setDefaultModuleLocation loc (m frameworkArgs)
         );
 
       traitModules = map resolveTraitModule node.traits;
+      includeModules = lib.imap0 resolveIncludeModule node.includes;
     in
     lib.throwIf (missing != [ ])
       "[nixy/node '${name}'] unknown traits: ${lib.concatStringsSep ", " missing}"
       {
-        module = { imports = traitModules ++ node.includes; };
+        module = { imports = traitModules ++ includeModules; };
         meta = node.meta;
       };
 
@@ -355,7 +345,7 @@ let
 
 in
 {
-  meta.version = "0.6.0";
+  meta.version = "0.7.0";
   inherit helpers;
 
   eval =

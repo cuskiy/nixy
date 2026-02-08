@@ -24,10 +24,6 @@ All helpers wrap their type in `nullOr`, so every option accepts `null`. See [He
 
 A trait is a named behavior unit with a `name` and a `module`.
 
-### Two-function form (recommended)
-
-The outer function receives framework arguments (`conf`, `name`, `nodes`, plus everything in `args`). It returns a standard NixOS/Darwin/HM module.
-
 ```nix
 traits = [{
   name = "ssh";
@@ -41,24 +37,6 @@ traits = [{
   };
 }];
 ```
-
-The two functions keep framework concerns and NixOS concerns separate. The outer function runs at framework time; the inner function runs during NixOS evaluation.
-
-### Flat form
-
-If you prefer a single function, Nixy auto-detects it and wraps it for you:
-
-```nix
-traits = [{
-  name = "ssh";
-  module = { conf, config, pkgs, ... }: {
-    services.openssh.enable = true;
-    services.openssh.ports = [ conf.ssh.port ];
-  };
-}];
-```
-
-Nixy detects flat modules by checking `builtins.functionArgs` for NixOS-specific names (`config`, `pkgs`, `options`, `modulesPath`). If found, it wraps the function so that framework args are available alongside NixOS args.
 
 ### Framework arguments
 
