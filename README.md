@@ -3,13 +3,12 @@
 </p>
 
 <p align="center">
-  Lightweight NixOS/Darwin/Home Manager framework
+  Schema-driven configuration framework for NixOS, Darwin, and Home Manager
 </p>
 
 <p align="center">
   <a href="https://anialic.github.io/nixy">Documentation</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#templates">Templates</a>
+  <a href="#quick-start">Quick Start</a>
 </p>
 
 ---
@@ -22,31 +21,38 @@ nix flake init -t github:anialic/nixy#minimal
 
 ## Overview
 
-Nixy organizes NixOS configurations around **hosts** and **modules**:
+Nixy separates **what knobs exist** (schema), **what they do** (traits), and **which machine gets what** (nodes).
+
+Define schema and traits:
 
 ```nix
 { mkStr, mkPort, ... }:
 {
   schema.ssh.port = mkPort 22;
 
-  modules.ssh.load = [({ host, ... }: {
-    services.openssh.enable = true;
-    services.openssh.ports = [ host.ssh.port ];
-  })];
+  traits = [{
+    name = "ssh";
+    module = { conf, config, ... }: {
+      services.openssh.enable = true;
+      services.openssh.ports = [ conf.ssh.port ];
+    };
+  }];
 }
 ```
 
-Hosts declare which modules they need:
+Define nodes:
 
 ```nix
-hosts.server = {
-  system = "x86_64-linux";
-  base.enable = true;
-  ssh.enable = true;
-};
+{
+  nodes.server = {
+    meta.system = "x86_64-linux";
+    traits = [ "base" "ssh" ];
+    schema.ssh.port = 2222;
+  };
+}
 ```
 
-## Usage
+Wire into your flake:
 
 ```nix
 {
@@ -55,23 +61,22 @@ hosts.server = {
     nixy.url = "github:anialic/nixy";
   };
 
-  outputs = { nixpkgs, nixy, ... }@inputs: nixy.eval {
-    inherit nixpkgs;
-    imports = [ ./. ];
-    args = { inherit inputs; };
-  };
+  outputs = { nixpkgs, nixy, ... }@inputs:
+    let
+      lib = nixpkgs.lib;
+      cluster = nixy.eval lib {
+        imports = [ ./. ];
+        args = { inherit inputs; };
+      };
+    in {
+      nixosConfigurations = lib.mapAttrs (_: node:
+        lib.nixosSystem {
+          system = node.meta.system;
+          modules = [ node.module ];
+        }
+      ) cluster.nodes;
+    };
 }
-```
-
-## Templates
-
-| Template | Description |
-|----------|-------------|
-| `minimal` | Single NixOS machine |
-| `complex` | Multi-platform with disko and deploy-rs |
-
-```bash
-nix flake init -t github:anialic/nixy#<template>
 ```
 
 ## License

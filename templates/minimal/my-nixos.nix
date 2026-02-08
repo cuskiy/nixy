@@ -1,10 +1,10 @@
 {
-  hosts.my-nixos = {
-    system = "x86_64-linux";
-    base.enable = true;
-    base.hostName = "my-nixos";
-    base.user = "alice";
-    extraModules = [
+  nodes.my-nixos = {
+    meta.system = "x86_64-linux";
+    traits = [ "base" ];
+    schema.base.hostName = "my-nixos";
+    schema.base.user = "alice";
+    includes = [
       {
         fileSystems."/" = {
           device = "/dev/disk/by-label/nixos";

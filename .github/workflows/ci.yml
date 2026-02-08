@@ -3,16 +3,12 @@ on:
   push:
     branches: [main]
   pull_request:
-
+    branches: [main]
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v30
-      - run: nix flake check --no-build
-      - run: |
-          for t in minimal complex; do
-            echo "--- $t ---"
-            nix flake check --no-build "path:./templates/$t" --override-input nixy path:.
-          done
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix flake check

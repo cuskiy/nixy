@@ -1,51 +1,24 @@
 # Helpers
 
-Helpers are shorthand for `lib.mkOption`. Every helper wraps its type in `nullOr`, so all options accept `null`.
+All helpers are available in the module argument set (e.g. `{ mkStr, mkPort, ... }:`). They are convenience wrappers that create `lib.mkOption` with `nullOr` types.
 
-## Basic Types
+## Schema Helpers
 
 | Helper | Type | Example |
 |--------|------|---------|
-| `mkStr` | `str` | `mkStr "default"` / `mkStr null` |
-| `mkBool` | `bool` | `mkBool true` |
-| `mkInt` | `int` | `mkInt 1024` |
-| `mkPort` | `port` | `mkPort 443` |
-| `mkPath` | `path` | `mkPath /var/data` |
-| `mkLines` | `lines` | `mkLines ""` |
-| `mkPackage` | `package` | `mkPackage null` |
-| `mkRaw` | `raw` | `mkRaw null` |
+| `mkStr default` | `nullOr str` | `mkStr "hello"` |
+| `mkBool default` | `nullOr bool` | `mkBool false` |
+| `mkInt default` | `nullOr int` | `mkInt 0` |
+| `mkPort default` | `nullOr port` | `mkPort 22` |
+| `mkPath default` | `nullOr path` | `mkPath null` |
+| `mkLines default` | `nullOr lines` | `mkLines ""` |
+| `mkPackage default` | `nullOr package` | `mkPackage null` |
+| `mkRaw default` | `nullOr raw` | `mkRaw null` |
+| `mkEnum values default` | `nullOr (enum values)` | `mkEnum [ "a" "b" ] "a"` |
+| `mkList elemType default` | `nullOr (listOf elemType)` | `mkList lib.types.str null` |
+| `mkAttrsOf valType default` | `nullOr (attrsOf valType)` | `mkAttrsOf lib.types.str null` |
+| `mkEither a b default` | `nullOr (either a b)` | `mkEither lib.types.str lib.types.int null` |
+| `mkSub options` | `submodule` | `mkSub { name = mkStr null; }` |
+| `mkSubList options` | `listOf submodule` | `mkSubList { host = mkStr null; }` |
 
-## Choice Types
-
-| Helper | Signature | Example |
-|--------|-----------|---------|
-| `mkEnum` | `[values] -> default -> option` | `mkEnum ["debug" "info" "error"] "info"` |
-| `mkEither` | `type -> type -> default -> option` | `mkEither lib.types.str lib.types.port "localhost"` |
-
-## Collections
-
-| Helper | Signature | Example |
-|--------|-----------|---------|
-| `mkList` | `elemType -> default -> option` | `mkList lib.types.port [80 443]` |
-| `mkAttrsOf` | `valType -> default -> option` | `mkAttrsOf lib.types.str null` |
-
-## Submodules
-
-`mkSub` creates a nested option group, defaulting to `{ }`:
-
-```nix
-schema.db.connection = mkSub {
-  host = mkStr "localhost";
-  port = mkPort 5432;
-};
-```
-
-`mkSubList` creates a list of submodules, defaulting to `[ ]`:
-
-```nix
-schema.lb.backends = mkSubList {
-  host = mkStr null;
-  port = mkPort 80;
-  weight = mkInt 1;
-};
-```
+Every `nullOr` helper accepts `null` as a valid value, which makes all schema options optional by default.

@@ -6,9 +6,20 @@
 
   outputs =
     { nixpkgs, nixy, ... }@inputs:
-    nixy.eval {
-      inherit nixpkgs;
-      imports = [ ./. ];
-      args = { inherit inputs; };
+    let
+      lib = nixpkgs.lib;
+      cluster = nixy.eval lib {
+        imports = [ ./. ];
+        args = { inherit inputs; };
+      };
+    in
+    {
+      nixosConfigurations = lib.mapAttrs (
+        _: node:
+        lib.nixosSystem {
+          system = node.meta.system;
+          modules = [ node.module ];
+        }
+      ) cluster.nodes;
     };
 }
