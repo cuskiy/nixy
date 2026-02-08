@@ -155,7 +155,6 @@ let
     "config"
     "options"
     "pkgs"
-    "lib"
     "modulesPath"
   ];
 
