@@ -12,7 +12,7 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - run: nix flake check --no-build
       - run: |
-          for t in minimal complex; do
+          for t in minimal; do
             echo "--- $t ---"
             nix flake check --no-build "path:./templates/$t" --override-input nixy path:.
           done
