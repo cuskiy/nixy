@@ -20,13 +20,13 @@
       "locked": {
         "lastModified": 1770661773,
         "narHash": "sha256-RZD6eVlMVZH0b3TPC6+qL09eNJcsVkpenkcRFldXjnE=",
-        "owner": "anialic",
+        "owner": "cuskiy",
         "repo": "nixy",
         "rev": "f24178007efbd2e0a08e19e6ac0eeefe92f04bca",
         "type": "github"
       },
       "original": {
-        "owner": "anialic",
+        "owner": "cuskiy",
         "repo": "nixy",
         "type": "github"
       }

@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixy.url = "github:anialic/nixy";
+    nixy.url = "github:cuskiy/nixy";
   };
 
   outputs =

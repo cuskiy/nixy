@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-nix flake init -t github:anialic/nixy#minimal
+nix flake init -t github:cuskiy/nixy#minimal
 ```
 
 This creates a working NixOS configuration with three files:

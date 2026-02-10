@@ -10,7 +10,7 @@ export default defineConfig({
       { text: "API", link: "/api" },
       {
         text: "GitHub",
-        link: "https://github.com/anialic/nixy",
+        link: "https://github.com/cuskiy/nixy",
       },
     ],
     sidebar: [

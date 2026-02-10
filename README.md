@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/anialic/nixy/main/.github/assets/logo.svg" width="200" alt="nixy">
+  <img src="https://raw.githubusercontent.com/cuskiy/nixy/main/.github/assets/logo.svg" width="200" alt="nixy">
 </p>
 
 <p align="center">
@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://anialic.github.io/nixy">Documentation</a> ·
+  <a href="https://cuskiy.github.io/nixy">Documentation</a> ·
   <a href="#quick-start">Quick Start</a>
 </p>
 
@@ -16,7 +16,7 @@
 ## Quick Start
 
 ```bash
-nix flake init -t github:anialic/nixy#minimal
+nix flake init -t github:cuskiy/nixy#minimal
 ```
 
 ## Overview
@@ -55,7 +55,7 @@ Wire into your flake:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixy.url = "github:anialic/nixy";
+    nixy.url = "github:cuskiy/nixy";
   };
 
   outputs = { nixpkgs, nixy, ... }@inputs:
