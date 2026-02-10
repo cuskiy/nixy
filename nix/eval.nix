@@ -15,7 +15,12 @@ let
       inherit default;
     };
 
+  mkReq =
+    type:
+    lib.mkOption { inherit type; };
+
   helpers = {
+    inherit mkOpt mkReq;
     mkStr = mkOpt lib.types.str;
     mkBool = mkOpt lib.types.bool;
     mkInt = mkOpt lib.types.int;
@@ -73,15 +78,15 @@ let
 
   resolveImport =
     excl: x:
-    if builtins.isPath x then
+    if builtins.isFunction x || builtins.isAttrs x then
+      [ x ]
+    else if builtins.isPath x then
       if lib.hasSuffix ".nix" (toString x) then
         [ x ]
       else if builtins.pathExists x then
         scanDir excl x
       else
         [ ]
-    else if builtins.isAttrs x then
-      [ x ]
     else if builtins.isList x then
       lib.concatMap (resolveImport excl) x
     else
@@ -248,6 +253,7 @@ let
 in
 result
 // {
+  inherit (evaluated) options;
   extend =
     extra:
     import ./eval.nix {
