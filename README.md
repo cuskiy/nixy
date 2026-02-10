@@ -1,32 +1,36 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cuskiy/nixy/main/.github/assets/logo.svg" width="200" alt="nixy">
-</p>
+# Nixy
 
-<p align="center">
-  Module builder for Nix.
-</p>
+**nixy** is a module builder that helps structure large Nix configurations without altering the native module system.
 
-<p align="center">
-  <a href="https://cuskiy.github.io/nixy">Documentation</a> ·
-  <a href="#quick-start">Quick Start</a>
-</p>
+It models configuration around three concepts:
 
----
+* **Schema**
+  Declares typed options with sensible defaults.
+  Definitions from multiple files are deep-merged into a single tree.
 
-## Quick Start
+* **Traits**
+  Named behavior units that transform schema values into concrete configuration.
 
-```bash
-nix flake init -t github:cuskiy/nixy#minimal
-```
+* **Nodes**
+  Each node selects its traits, overrides schema values, and produces a ready-to-use module.
 
-## Overview
+The result is standard Nix modules, fully compatible with `lib.evalModules` and `lib.nixosSystem`.
 
-nixy separates **what knobs exist** (schema), **what they do** (traits), and **which target gets what** (nodes).
+## How it works
+
+* Collects modules from files, directories, or inline definitions
+* Merges all schema declarations into a single typed option tree
+* Composes node-specific modules by selecting traits and wiring values
+* Ensures only referenced traits participate in the final configuration
+
+Nixy only controls **which modules participate** and **which values are wired in**.
+
+## Example
 
 Define schema and traits:
 
 ```nix
-{ mkStr, mkPort, ... }:
+{ mkPort, ... }:
 {
   schema.ssh.port = mkPort 22;
 
@@ -49,15 +53,10 @@ Define nodes:
 }
 ```
 
-Wire into your flake:
+Wire into a flake:
 
 ```nix
 {
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixy.url = "github:cuskiy/nixy";
-  };
-
   outputs = { nixpkgs, nixy, ... }@inputs:
     let
       lib = nixpkgs.lib;
@@ -67,15 +66,24 @@ Wire into your flake:
         args = { inherit inputs; };
       };
     in {
-      nixosConfigurations = lib.mapAttrs (_: node:
-        lib.nixosSystem {
-          system = node.schema.base.system;
-          modules = [ node.module ];
-        }
-      ) cluster.nodes;
+      nixosConfigurations =
+        lib.mapAttrs (_: node:
+          lib.nixosSystem {
+            system = node.schema.base.system;
+            modules = [ node.module ];
+          }
+        ) cluster.nodes;
     };
 }
 ```
+
+## Try it
+
+```bash
+nix flake init -t github:cuskiy/nixy#minimal
+```
+
+---
 
 ## License
 
